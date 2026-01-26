@@ -5,3 +5,6 @@ Should be:
 *easy to use
 *fast to load
 *portable
+
+
+Launch: /storypager-demo.html
