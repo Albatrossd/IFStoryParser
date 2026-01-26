@@ -1,10 +1,10 @@
-#IFStoryParser for Low Poer Devices
-##eReaders, pagers, Nokia candybar phones
+# IFStoryParser for Low Poer Devices
+## eReaders, pagers, Nokia candybar phones
 
 Should be:
-*easy to use
-*fast to load
-*portable
+* easy to use
+* fast to load
+* portable
 
 
-Launch: /storypager-demo.html
+[Launch](/storypager-demo.html)
