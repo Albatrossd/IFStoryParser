@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Story Pager Demo (Kindle-Friendly)</title>
+  <style>
+    /* Kindle Paperwhite browser: keep it simple, high-contrast, no fancy layout */
+    body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; }
+    h1 { font-size: 18px; margin: 0 0 8px 0; }
+    #story { font-size: 16px; }
+    #output { margin: 10px 0; }
+    .rule { border-top: 1px solid #000; margin: 10px 0; }
+    .btnrow { margin: 8px 0; }
+    button {
+      font-family: serif;
+      font-size: 16px;
+      padding: 8px 10px;
+      margin: 4px 6px 4px 0;
+      border: 1px solid #000;
+      background: #fff;
+    }
+    #cmdwrap { margin-top: 10px; }
+    input[type="text"] {
+      font-family: monospace;
+      font-size: 14px;
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #000;
+      box-sizing: border-box;
+    }
+    .small { font-size: 12px; }
+    .mono { font-family: monospace; }
+    .dim { opacity: 0.9; }
+    .logline { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <h1>Story Pager Demo</h1>
+  <div class="small dim">
+    Intent-first play: use the buttons. Optional command line below supports human-ish phrasing and synonyms.
+  </div>
+
+  <div class="rule"></div>
+
+  <div id="story"></div>
+
+  <div class="btnrow" id="actions"></div>
+
+  <div class="rule"></div>
+
+  <div id="output"></div>
+
+  <div id="cmdwrap">
+    <div class="small dim">Command (optional):</div>
+    <input id="cmd" type="text" placeholder='Try: "enter shrubs", "x doorway behind shrubs", "use doorway", "go inside"' />
+    <div class="small dim">Tip: press Enter. (On Kindle, you may need to tap the input first.)</div>
+  </div>
+
+<script>
+(function () {
+  // --- Minimal state ---
+  var S = {
+    loc: "west_portico",
+    seenDoorway: false,
+    shrubsPushedAside: false,
+    inTheater: false,
+    turns: 0
+  };
+
+  // --- Utility ---
+  function esc(s) {
+    return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function say(html) {
+    var out = document.getElementById("output");
+    out.innerHTML += '<div class="logline">' + html + '</div>';
+    // Kindle browser scrolling can be weird; keep it simple.
+    // Attempt to scroll to bottom:
+    try { window.scrollTo(0, document.body.scrollHeight); } catch(e){}
+  }
+
+  function clearOutput() {
+    document.getElementById("output").innerHTML = "";
+  }
+
+  // --- Scene text ---
+  function renderStory() {
+    var story = document.getElementById("story");
+    var actions = document.getElementById("actions");
+    actions.innerHTML = "";
+
+    if (S.loc === "west_portico") {
+      var t = "West Portico<br><br>"
+        + "More people are relaxing here, perhaps because of the kegman who sells his beer under the theater portico. "
+        + "The main street bakes in sunlight to the south; the front of the theater continues to the north, adorned by "
+        + "some decorative potted shrubs. ";
+
+      // In classic IF, the doorway is “half-hidden” and causes grief.
+      // Here we still describe it, but we *honor* the affordance.
+      t += "Half-hidden behind the shrubs is a doorway.";
+
+      t += "<br><br><span class='dim'>Again, you feel that cool thread of air across your face.</span>";
+
+      story.innerHTML = t;
+
+      // Intent-first actions
+      addAction("Examine doorway", function () {
+        S.seenDoorway = true;
+        say("It’s a plain doorway leading into the relative dimness of the theater. A small sign by the jamb reads: <span class='mono'>“By right, please.”</span>");
+        renderStory();
+      });
+
+      addAction(S.shrubsPushedAside ? "Enter doorway" : "Push aside shrubs", function () {
+        if (!S.shrubsPushedAside) {
+          S.shrubsPushedAside = true;
+          S.seenDoorway = true;
+          say("You push aside the shrubs. The doorway is easier to reach now, and the cool air is unmistakable.");
+        } else {
+          // Enter
+          S.loc = "theater_lobby";
+          S.inTheater = true;
+          say("You step through the doorway into the theater’s dim interior.");
+        }
+        renderStory();
+      });
+
+      if (S.shrubsPushedAside) {
+        addAction("Enter doorway", function () {
+          S.loc = "theater_lobby";
+          S.inTheater = true;
+          say("You step through the doorway into the theater’s dim interior.");
+          renderStory();
+        });
+      }
+
+      addAction("Look around", function () {
+        say("Sunlight, chatter, and the faint smell of beer. The cool thread of air keeps tugging at your attention.");
+      });
+
+    } else if (S.loc === "theater_lobby") {
+      story.innerHTML =
+        "Theater Lobby<br><br>"
+        + "Dusty light drifts through a high window. The air is cooler here. A corridor leads deeper inside; "
+        + "behind you, the doorway returns to the portico.<br><br>"
+        + "<span class='dim'>This is the entire demo scene. The point is the transition felt easy, not adversarial.</span>";
+
+      addAction("Go back outside", function () {
+        S.loc = "west_portico";
+        say("You step back out beneath the portico. The heat returns immediately.");
+        renderStory();
+      });
+
+      addAction("End demo", function () {
+        say("<b>Demo complete.</b> You didn’t have to fight the parser. That’s the whole thesis.");
+      });
+    }
+  }
+
+  function addAction(label, fn) {
+    var actions = document.getElementById("actions");
+    var b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = function () { step(); fn(); };
+    actions.appendChild(b);
+  }
+
+  function step() {
+    S.turns++;
+  }
+
+  // --- Forgiving “soft parser” ---
+  // This is intentionally tiny: it resolves *intent* for this scene.
+  function handleCommand(raw) {
+    step();
+    var cmd = (raw || "").trim().toLowerCase();
+    if (!cmd) return;
+
+    // Normalize: remove punctuation, collapse spaces
+    cmd = cmd.replace(/[.,!?;:()[\]"]/g, " ").replace(/\s+/g, " ").trim();
+
+    // Helper checks
+    function has(w) { return cmd.indexOf(w) !== -1; }
+
+    // Common IF abbreviations
+    if (cmd === "l" || cmd === "look") { say("You take another look."); renderStory(); return; }
+    if (cmd === "x" || cmd === "examine") { cmd = "examine"; }
+
+    // Scene-specific intent resolution:
+    // Goal: if user mentions shrubs/doorway/hidden and wants to enter/go/use, we do the right thing.
+    var wantsEnter = has("enter") || has("go") || has("walk") || has("step") || has("inside") || has("in");
+    var wantsExamine = has("examine") || has("x ") || cmd === "x" || has("look at") || has("inspect");
+    var mentionsShrubs = has("shrub") || has("shrubs") || has("bush") || has("bushes");
+    var mentionsDoor = has("door") || has("doorway") || has("entry") || has("entrance");
+    var mentionsHidden = has("hidden") || has("behind") || has("half") || has("half hidden");
+
+    if (S.loc === "west_portico") {
+      // Examine cases
+      if (wantsExamine && (mentionsDoor || (mentionsHidden && mentionsDoor) || (mentionsDoor && mentionsShrubs) || mentionsHidden)) {
+        S.seenDoorway = true;
+        say("It’s a plain doorway leading into the relative dimness of the theater. A small sign reads: <span class='mono'>“By right, please.”</span>");
+        renderStory();
+        return;
+      }
+
+      // Enter cases (the “frustration” fixes)
+      if (wantsEnter && (mentionsShrubs || mentionsDoor || mentionsHidden)) {
+        // If they try to “enter shrubs”, we interpret intent as reaching the doorway.
+        if (!S.shrubsPushedAside) {
+          S.shrubsPushedAside = true;
+          S.seenDoorway = true;
+          say("You push aside the shrubs to get through. The doorway is right there now, breathing cool air.");
+          renderStory();
+          return;
+        } else {
+          S.loc = "theater_lobby";
+          S.inTheater = true;
+          say("You slip through the doorway into the theater’s dim interior.");
+          renderStory();
+          return;
+        }
+      }
+
+      // “use doorway” should not be rejected as “not a verb”
+      if (has("use") && (mentionsDoor || mentionsHidden)) {
+        if (!S.shrubsPushedAside) {
+          S.shrubsPushedAside = true;
+          S.seenDoorway = true;
+          say("You reach for the doorway, but the shrubs are in the way. You push them aside.");
+          renderStory();
+        } else {
+          S.loc = "theater_lobby";
+          S.inTheater = true;
+          say("You use the doorway in the traditional manner: by walking through it.");
+          renderStory();
+        }
+        return;
+      }
+
+      // If we truly can’t map intent, respond gently.
+      say("You hesitate. Try <span class='mono'>look</span>, <span class='mono'>examine doorway</span>, or just press a button.");
+      return;
+    }
+
+    if (S.loc === "theater_lobby") {
+      if (wantsEnter && (has("back") || has("outside") || has("out") || has("portico"))) {
+        S.loc = "west_portico";
+        say("You step back outside beneath the portico.");
+        renderStory();
+        return;
+      }
+      say("Nothing else to do here in the demo. Try <span class='mono'>go back</span> or press a button.");
+      return;
+    }
+  }
+
+  // Input handling
+  var cmdEl = document.getElementById("cmd");
+  cmdEl.onkeydown = function (e) {
+    e = e || window.event;
+    if (e.keyCode === 13) { // Enter
+      var v = cmdEl.value;
+      cmdEl.value = "";
+      say("<span class='mono'>&gt; " + esc(v) + "</span>");
+      handleCommand(v);
+      return false;
+    }
+  };
+
+  // Start
+  clearOutput();
+  renderStory();
+  say("<b>Demo:</b> try pressing <i>Push aside shrubs</i>, or type something frustrating like <span class='mono'>enter shrubs</span>.");
+})();
+</script>
+</body>
+</html>
