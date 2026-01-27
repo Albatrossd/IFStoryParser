@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Story Pager — Escape Demo (JSON Engine)</title>
+  <style>
+    body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; }
+    h1 { font-size: 18px; margin: 0 0 8px 0; }
+    #story { font-size: 16px; }
+    #output { margin: 10px 0; max-height: 25vh; overflow: scroll; }
+    .rule { border-top: 1px solid #000; margin: 10px 0; }
+    .btnrow { margin: 8px 0; }
+    button {
+      font-family: serif;
+      font-size: 16px;
+      padding: 8px 10px;
+      margin: 4px 6px 4px 0;
+      border: 1px solid #000;
+      background: #fff;
+    }
+    #cmdwrap { margin-top: 10px; }
+    input[type="text"] {
+      font-family: monospace;
+      font-size: 14px;
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #000;
+      box-sizing: border-box;
+    }
+    .small { font-size: 12px; }
+    .mono { font-family: monospace; }
+    .dim { opacity: 0.9; }
+    .logline { margin: 6px 0; }
+
+    #suggest { margin-top: 6px; border: 1px solid #000; padding: 6px; }
+    #suggest .chip {
+      display: inline-block;
+      border: 1px solid #000;
+      padding: 4px 6px;
+      margin: 4px 6px 0 0;
+      font-family: monospace;
+      font-size: 13px;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <h1>Story Pager — Escape Demo</h1>
+  <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
+
+  <div class="rule"></div>
+
+  <div id="story"></div>
+  <div class="btnrow" id="actions"></div>
+
+  <div class="rule"></div>
+
+  <div id="output"></div>
+  <div class="btnrow" id="sysactions"></div>
+
+  <div id="cmdwrap">
+    <div class="small dim">Command (optional):</div>
+    <input id="cmd" type="text" placeholder='Try: "open toolbox", "flip aux", "remove vent", "pull lever with hook"' />
+    <div id="suggest" class="dim">
+      <div class="small">Suggestions:</div>
+      <div id="chips"></div>
+    </div>
+    <div class="small dim">Tip: press Enter.</div>
+  </div>
+
+<!-- ================== STORY BLOB ================== -->
+<script id="story-json" type="application/json">
+{
+  "id": "service-closet",
+  "title": "The Service Closet",
+  "version": 1,
+  "start": "closet",
+  "globals": {
+    "maxTurns": 8
+  },
+  "dictionary": {
+    "verbs": {
+      "x": "examine",
+      "examine": "examine",
+      "inspect": "examine",
+      "look": "look",
+      "l": "look",
+      "open": "open",
+      "take": "take",
+      "get": "take",
+      "grab": "take",
+      "flip": "flip",
+      "switch": "flip",
+      "turn": "flip",
+      "remove": "remove",
+      "unscrew": "remove",
+      "pull": "pull",
+      "use": "use",
+      "try": "try",
+      "enter": "enter",
+      "go": "enter"
+    },
+    "nouns": {
+      "panel": "breaker panel",
+      "breaker": "breaker panel",
+      "breakers": "breaker panel",
+      "tool box": "toolbox",
+      "box": "toolbox",
+      "vent": "vent",
+      "duct": "vent",
+      "door": "door",
+      "handle": "door",
+      "aux": "aux",
+      "screwdriver": "screwdriver",
+      "gloves": "gloves",
+      "hook": "wire hook",
+      "wire": "wire hook",
+      "lever": "lever",
+      "latch": "lever",
+      "sink": "sink",
+      "shelf": "shelf"
+    }
+  },
+  "state": {
+    "turns": 0,
+    "loc": "closet",
+    "flags": {
+      "seenPanel": false,
+      "openedToolbox": false,
+      "haveScrewdriver": false,
+      "haveGloves": false,
+      "haveHook": false,
+      "ventRemoved": false,
+      "auxFlipped": false,
+      "latchClick": false,
+      "leverAccessible": false,
+      "leverPulled": false,
+      "doorUnlocked": false,
+      "escaped": false
+    }
+  },
+  "scenes": {
+    "closet": {
+      "title": "Service Closet",
+      "body": [
+        "The air smells faintly of dust and warm plastic. A fluorescent light flickers overhead.",
+        "The door you came through has no handle on this side — just a smooth metal plate.",
+        "",
+        "Against the walls: a breaker panel, a utility sink, a metal shelf holding a toolbox, and a vent near the ceiling.",
+        "",
+        "A low hum vibrates through the room."
+      ],
+      "actions": [
+        {
+          "id": "look",
+          "label": "Look around",
+          "verbs": ["look", "examine"],
+          "targets": ["room", "around", "closet"],
+          "when": "true",
+          "do": [
+            {"say": "Same cramped closet. Same hum. The vent and breaker panel seem to matter."}
+          ]
+        },
+        {
+          "id": "examine_panel",
+          "label": "Examine breaker panel",
+          "verbs": ["examine", "look"],
+          "targets": ["breaker panel", "panel", "breakers"],
+          "when": "!flags.seenPanel",
+          "do": [
+            {"set": {"flags.seenPanel": true}},
+            {"say": "The breaker panel is labeled with faded marker:"},
+            {"say": "LIGHTS • HVAC • SECURITY • AUX — DO NOT TOUCH"},
+            {"say": "The SECURITY switch is already off. The hum seems tied to AUX."}
+          ]
+        },
+        {
+          "id": "flip_aux",
+          "label": "Flip AUX breaker",
+          "verbs": ["flip", "use", "switch", "turn"],
+          "targets": ["aux", "breaker panel"],
+          "when": "flags.seenPanel && !flags.auxFlipped",
+          "do": [
+            {"set": {"flags.auxFlipped": true}},
+            {"say": "You flip AUX. The hum cuts out. The fluorescent light steadies."},
+            {"say": "From inside the vent, you hear a dull click — like a latch disengaging."},
+            {"set": {"flags.latchClick": true}}
+          ]
+        },
+        {
+          "id": "open_toolbox",
+          "label": "Open toolbox",
+          "verbs": ["open", "examine"],
+          "targets": ["toolbox", "box"],
+          "when": "!flags.openedToolbox",
+          "do": [
+            {"set": {"flags.openedToolbox": true}},
+            {"say": "Inside the toolbox: a flathead screwdriver, work gloves, and a bent wire hook."},
+            {"say": "The hook looks improvised, not factory-made."},
+            {"set": {"flags.haveScrewdriver": true, "flags.haveGloves": true, "flags.haveHook": true}},
+            {"say": "<span class='dim'>[You take the tools automatically.]</span>"}
+          ]
+        },
+        {
+          "id": "examine_vent",
+          "label": "Look at vent",
+          "verbs": ["examine", "look"],
+          "targets": ["vent", "duct"],
+          "when": "true",
+          "do": [
+            {"say": "The vent is screwed in place. Behind it, you can hear air moving."},
+            {"say": "The screws are old but intact."}
+          ]
+        },
+        {
+          "id": "remove_vent",
+          "label": "Remove vent (requires screwdriver)",
+          "verbs": ["remove", "unscrew", "open", "use"],
+          "targets": ["vent"],
+          "when": "flags.haveScrewdriver && !flags.ventRemoved",
+          "do": [
+            {"set": {"flags.ventRemoved": true}},
+            {"say": "You remove the vent cover. A dark duct opens above you."},
+            {"if": "flags.latchClick", "then": [
+              {"say": "Just inside, a small metal lever now hangs loose, like it was freed by that click."},
+              {"set": {"flags.leverAccessible": true}}
+            ], "else": [
+              {"say": "Inside the duct, you can just make out a small lever, but it seems locked in place."},
+              {"say": "<span class='dim'>[Something needs to change before it will move.]</span>"}
+            ]}
+          ]
+        },
+        {
+          "id": "flip_aux_after_vent",
+          "label": "Flip AUX (after removing vent)",
+          "verbs": ["flip", "use", "switch", "turn"],
+          "targets": ["aux"],
+          "when": "flags.seenPanel && flags.ventRemoved && !flags.auxFlipped",
+          "do": [
+            {"set": {"flags.auxFlipped": true, "flags.latchClick": true, "flags.leverAccessible": true}},
+            {"say": "You flip AUX. The hum dies and the light steadies."},
+            {"say": "Inside the duct, the lever gives slightly — it’s loose now."}
+          ]
+        },
+        {
+          "id": "pull_lever",
+          "label": "Pull lever with hook",
+          "verbs": ["pull", "use"],
+          "targets": ["lever", "wire hook", "hook"],
+          "when": "flags.ventRemoved && flags.leverAccessible && flags.haveHook && !flags.leverPulled",
+          "do": [
+            {"set": {"flags.leverPulled": true, "flags.doorUnlocked": true}},
+            {"say": "You snag the lever with the wire hook and pull."},
+            {"say": "Behind you, metal shifts. The smooth door plate slides aside, revealing a normal handle."}
+          ]
+        },
+        {
+          "id": "try_door_locked",
+          "label": "Try the door",
+          "verbs": ["try", "open", "use", "examine"],
+          "targets": ["door"],
+          "when": "!flags.doorUnlocked",
+          "do": [
+            {"say": "You press on the smooth plate. No handle. No give."},
+            {"say": "But the cool air suggests something mechanical is hiding behind it."}
+          ]
+        },
+        {
+          "id": "open_door_escape",
+          "label": "Open the door",
+          "verbs": ["open", "enter", "use", "go"],
+          "targets": ["door", "handle"],
+          "when": "flags.doorUnlocked && !flags.escaped",
+          "do": [
+            {"set": {"flags.escaped": true}},
+            {"say": "You open the door and step into a quiet maintenance corridor."},
+            {"say": "Behind you, the closet light shuts off."},
+            {"say": "<b>You are out.</b>"}
+          ]
+        }
+      ]
+    }
+  }
+}
+</script>
+
+<script>
+(function(){
+  // ---------- Parse story ----------
+  var STORY = JSON.parse(document.getElementById("story-json").textContent);
+
+  // ---------- Storage ----------
+  var SAVE_KEY = "storypager_save_" + STORY.id;
+
+  function canUseLocalStorage() {
+    try {
+      var k = "__sp_test__";
+      localStorage.setItem(k, "1");
+      localStorage.removeItem(k);
+      return true;
+    } catch (e) { return false; }
+  }
+  var HAS_LS = canUseLocalStorage();
+
+  function say(html) {
+    var out = document.getElementById("output");
+    out.innerHTML += '<div class="logline">' + html + '</div>';
+    try { window.scrollTo(0, document.body.scrollHeight); } catch(e){}
+  }
+
+  function clearOutput(){ document.getElementById("output").innerHTML = ""; }
+
+  function saveState(silent) {
+    try {
+      if (!HAS_LS) { if(!silent) say("<span class='dim'>[Save unavailable]</span>"); return; }
+      localStorage.setItem(SAVE_KEY, JSON.stringify(STATE));
+      if(!silent) say("<span class='dim'>[Saved]</span>");
+    } catch(e) { if(!silent) say("<span class='dim'>[Save failed]</span>"); }
+  }
+
+  function loadState(silent) {
+    try {
+      if (!HAS_LS) { if(!silent) say("<span class='dim'>[Load unavailable]</span>"); return false; }
+      var raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) { if(!silent) say("<span class='dim'>[No save found]</span>"); return false; }
+      var next = JSON.parse(raw);
+      if (!next || !next.flags) { if(!silent) say("<span class='dim'>[Save corrupted]</span>"); return false; }
+      STATE = next;
+      if(!silent) say("<span class='dim'>[Loaded]</span>");
+      render();
+      return true;
+    } catch(e) { if(!silent) say("<span class='dim'>[Load failed]</span>"); return false; }
+  }
+
+  function clearSave() {
+    try { if (HAS_LS) localStorage.removeItem(SAVE_KEY); say("<span class='dim'>[Save cleared]</span>"); }
+    catch(e){ say("<span class='dim'>[Clear failed]</span>"); }
+  }
+
+  // ---------- State ----------
+  var STATE = deepClone(STORY.state);
+
+  function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+  // ---------- Tiny expression evaluator ----------
+  // Supports: true, !flags.x, flags.x, flags.x && flags.y, flags.x || flags.y
+  function evalWhen(expr) {
+    expr = (expr || "").trim();
+    if (!expr) return false;
+    if (expr === "true") return true;
+
+    // Replace tokens with boolean values
+    var e = expr;
+
+    // flags.*
+    e = e.replace(/flags\.([a-zA-Z0-9_]+)/g, function(_, k){
+      return STATE.flags[k] ? "true" : "false";
+    });
+
+    // basic !true/false
+    e = e.replace(/!true/g, "false").replace(/!false/g, "true");
+
+    // VERY small safe eval: only allow true/false, operators, parentheses, spaces
+    if (!/^[truefals() !&|]+$/.test(e.replace(/true|false/g, "true"))) {
+      return false;
+    }
+    // Use Function to evaluate boolean expression
+    try {
+      // eslint-disable-next-line no-new-func
+      return !!Function("return (" + e + ");")();
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function applySet(setObj) {
+    for (var key in setObj) {
+      if (!Object.prototype.hasOwnProperty.call(setObj, key)) continue;
+      var val = setObj[key];
+      // Only supporting flags.* and turns/loc for demo
+      if (key.indexOf("flags.") === 0) {
+        var fk = key.slice("flags.".length);
+        STATE.flags[fk] = !!val;
+      } else if (key === "turns") {
+        STATE.turns = val;
+      } else if (key === "loc") {
+        STATE.loc = val;
+      }
+    }
+  }
+
+  function runDo(doList) {
+    for (var i=0;i<doList.length;i++){
+      var step = doList[i];
+      if (step.say) say(step.say);
+      if (step.set) applySet(step.set);
+      if (step.if) {
+        var ok = evalWhen(step.if);
+        if (ok && step.then) runDo(step.then);
+        if (!ok && step.else) runDo(step.else);
+      }
+    }
+  }
+
+  // ---------- Render ----------
+  function renderSysActions(){
+    var sys = document.getElementById("sysactions");
+    sys.innerHTML = "";
+
+    addSysBtn(sys, "Save", function(){ saveState(false); });
+    addSysBtn(sys, "Load", function(){ loadState(false); });
+    addSysBtn(sys, "Clear Save", function(){ clearSave(); });
+
+    if (!HAS_LS) {
+      var note = document.createElement("div");
+      note.className = "small dim";
+      note.textContent = "Note: localStorage appears unavailable on this browser.";
+      sys.appendChild(note);
+    }
+  }
+
+  function addSysBtn(parent, label, fn){
+    var b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = fn;
+    parent.appendChild(b);
+  }
+
+  function render(){
+    renderSysActions();
+    var scene = STORY.scenes[STATE.loc];
+    var storyEl = document.getElementById("story");
+    var actionsEl = document.getElementById("actions");
+    actionsEl.innerHTML = "";
+
+    var body = (scene.body || []).join("<br>");
+    storyEl.innerHTML = "<b>" + esc(scene.title) + "</b><br><br>" + body;
+
+    // Build available actions
+    var avail = [];
+    for (var i=0;i<scene.actions.length;i++){
+      var a = scene.actions[i];
+      if (evalWhen(a.when)) avail.push(a);
+    }
+
+    // If already escaped, show only end state actions (or none)
+    if (STATE.flags.escaped) {
+      // Still allow Save/Load
+      updateSuggestions(avail);
+      return;
+    }
+
+    for (var j=0;j<avail.length;j++){
+      (function(action){
+        var b = document.createElement("button");
+        b.textContent = action.label;
+        b.onclick = function(){
+          STATE.turns++;
+          runDo(action.do || []);
+          saveState(true);
+          render();
+          updateSuggestions(getAvailableActions());
+        };
+        actionsEl.appendChild(b);
+      })(avail[j]);
+    }
+
+    updateSuggestions(avail);
+  }
+
+  function esc(s){
+    return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function getAvailableActions(){
+    var scene = STORY.scenes[STATE.loc];
+    var out = [];
+    for (var i=0;i<scene.actions.length;i++){
+      if (evalWhen(scene.actions[i].when)) out.push(scene.actions[i]);
+    }
+    return out;
+  }
+
+  // ---------- Soft parser driven by actions ----------
+  function normalizeInput(raw) {
+    var s = (raw || "").trim().toLowerCase();
+    s = s.replace(/[.,!?;:()[\]"]/g, " ").replace(/\s+/g, " ").trim();
+    if (!s) return { verb:"", obj:"", raw:"" };
+
+    var toks = s.split(" ");
+    var v0 = toks[0] || "";
+    var verb = (STORY.dictionary.verbs[v0] || v0);
+
+    // Handle "look at X"
+    var rest = toks.slice(1);
+    if (verb === "look" && rest[0] === "at") rest = rest.slice(1);
+
+    var obj = rest.join(" ").trim();
+    if (STORY.dictionary.nouns[obj]) obj = STORY.dictionary.nouns[obj];
+    else {
+      var last = rest.length ? rest[rest.length-1] : "";
+      if (STORY.dictionary.nouns[last]) obj = STORY.dictionary.nouns[last];
+    }
+
+    return { verb: verb, obj: obj, raw: s };
+  }
+
+  function scoreAction(action, verb, obj) {
+    var score = 0;
+
+    // Verb match
+    var verbs = action.verbs || [];
+    for (var i=0;i<verbs.length;i++){
+      if (verbs[i] === verb) { score += 3; break; }
+    }
+
+    // Target match: if obj empty, give small score if verb matches
+    var targets = action.targets || [];
+    if (!obj) {
+      if (score >= 3) score += 1;
+      return score;
+    }
+
+    for (var j=0;j<targets.length;j++){
+      var t = targets[j];
+      if (t === obj) { score += 4; break; }
+      // partial match helps Kindle typing
+      if (t.indexOf(obj) !== -1 || obj.indexOf(t) !== -1) score += 2;
+    }
+
+    return score;
+  }
+
+  function handleCommand(raw) {
+    var s = (raw || "").trim();
+    if (!s) return;
+
+    // Meta commands
+    var low = s.toLowerCase().trim();
+    if (low === "save") { saveState(false); return; }
+    if (low === "load") { loadState(false); return; }
+    if (low === "clear save" || low === "clear") { clearSave(); return; }
+
+    var n = normalizeInput(s);
+    say("<span class='dim'>[Interpreted: " + esc(n.verb || "?") + (n.obj ? " " + esc(n.obj) : "") + "]</span>");
+
+    var avail = getAvailableActions();
+
+    // Choose best-scoring action among currently available ones
+    var best = null, bestScore = -1;
+    for (var i=0;i<avail.length;i++){
+      var a = avail[i];
+      var sc = scoreAction(a, n.verb, n.obj);
+      if (sc > bestScore) { bestScore = sc; best = a; }
+    }
+
+    // Threshold: avoid firing random actions
+    if (!best || bestScore < 3) {
+      say("You hesitate. Try a button, or type something like <span class='mono'>open toolbox</span>, <span class='mono'>examine panel</span>, or <span class='mono'>remove vent</span>.");
+      return;
+    }
+
+    // Run it
+    STATE.turns++;
+    runDo(best.do || []);
+    saveState(true);
+    render();
+    updateSuggestions(getAvailableActions());
+  }
+
+  // ---------- Suggestions ----------
+  function updateSuggestions(availActions) {
+    var cmdEl = document.getElementById("cmd");
+    var chips = document.getElementById("chips");
+    var val = (cmdEl.value || "").trim().toLowerCase();
+
+    // Build suggestions from actions (verb + target)
+    var sugg = [];
+
+    for (var i=0;i<availActions.length;i++){
+      var a = availActions[i];
+      var v = (a.verbs && a.verbs[0]) ? a.verbs[0] : "";
+      var t = (a.targets && a.targets[0]) ? a.targets[0] : "";
+      if (v && t) sugg.push(v + " " + t);
+      else if (v) sugg.push(v);
+      // Also include label-ish shorthand
+      sugg.push(a.label.toLowerCase());
+    }
+
+    // Add meta commands
+    sugg.push("save"); sugg.push("load"); sugg.push("clear save");
+
+    // Dedup
+    var seen = {};
+    var uniq = [];
+    for (var j=0;j<sugg.length;j++){
+      var k = sugg[j];
+      if (!k || seen[k]) continue;
+      seen[k]=1; uniq.push(k);
+    }
+
+    // Filter
+    var filtered = uniq;
+    if (val) {
+      filtered = uniq.filter(function(x){
+        return x.indexOf(val) !== -1;
+      });
+    }
+    filtered = filtered.slice(0, 8);
+
+    chips.innerHTML = "";
+    for (var m=0;m<filtered.length;m++){
+      (function(txt){
+        var a = document.createElement("a");
+        a.href = "javascript:void(0)";
+        a.className = "chip";
+        a.textContent = txt;
+        a.onclick = function(){
+          cmdEl.value = txt;
+          try { cmdEl.focus(); } catch(e){}
+          updateSuggestions(getAvailableActions());
+        };
+        chips.appendChild(a);
+      })(filtered[m]);
+    }
+  }
+
+  // ---------- Wire up input ----------
+  var cmdEl = document.getElementById("cmd");
+  cmdEl.onkeydown = function(e){
+    e = e || window.event;
+    if (e.keyCode === 13) {
+      var v = cmdEl.value;
+      cmdEl.value = "";
+      say("<span class='mono'>&gt; " + esc(v) + "</span>");
+      handleCommand(v);
+      updateSuggestions(getAvailableActions());
+      return false;
+    }
+  };
+  cmdEl.onkeyup = function(){ updateSuggestions(getAvailableActions()); };
+  cmdEl.onclick = function(){ updateSuggestions(getAvailableActions()); };
+
+  // ---------- Start ----------
+  clearOutput();
+  render();
+  updateSuggestions(getAvailableActions());
+  say("<b>Goal:</b> escape in ~8 turns. Use buttons or type commands.");
+  // Optional: auto-load
+  // loadState(true);
+})();
+</script>
+</body>
+</html>

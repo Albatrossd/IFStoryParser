@@ -7,4 +7,5 @@ Should be:
 * portable
 
 
-[Launch](/storypager-demo.html)
+[Demo - Initial](/storypager-demo.html)
+[Demo - Escape Room: (00:08:00)](/storypager-demo.html)
