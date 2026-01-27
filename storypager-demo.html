@@ -3,9 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Story Pager Demo (Kindle-Friendly)</title>
+  <title>Story Pager Demo (Kindle-Friendly) — Save + Dictionary + Autocomplete</title>
   <style>
-    /* Kindle Paperwhite browser: keep it simple, high-contrast, no fancy layout */
     body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; }
     h1 { font-size: 18px; margin: 0 0 8px 0; }
     #story { font-size: 16px; }
@@ -33,12 +32,29 @@
     .mono { font-family: monospace; }
     .dim { opacity: 0.9; }
     .logline { margin: 6px 0; }
+
+    /* Autocomplete */
+    #suggest {
+      margin-top: 6px;
+      border: 1px solid #000;
+      padding: 6px;
+    }
+    #suggest .small { margin-bottom: 4px; }
+    #suggest .chip {
+      display: inline-block;
+      border: 1px solid #000;
+      padding: 4px 6px;
+      margin: 4px 6px 0 0;
+      font-family: monospace;
+      font-size: 13px;
+      background: #fff;
+    }
   </style>
 </head>
 <body>
   <h1>Story Pager Demo</h1>
   <div class="small dim">
-    Intent-first play: use the buttons. Optional command line below supports human-ish phrasing and synonyms.
+    Intent-first play: use the buttons. Optional command line supports human-ish phrasing + synonyms.
   </div>
 
   <div class="rule"></div>
@@ -51,15 +67,93 @@
 
   <div id="output"></div>
 
+  <div class="btnrow" id="sysactions"></div>
+
   <div id="cmdwrap">
     <div class="small dim">Command (optional):</div>
     <input id="cmd" type="text" placeholder='Try: "enter shrubs", "x doorway behind shrubs", "use doorway", "go inside"' />
-    <div class="small dim">Tip: press Enter. (On Kindle, you may need to tap the input first.)</div>
+    <div id="suggest" class="dim">
+      <div class="small">Suggestions:</div>
+      <div id="chips"></div>
+    </div>
+    <div class="small dim">Tip: press Enter. On Kindle, you may need to tap the input first.</div>
   </div>
 
 <script>
 (function () {
-  // --- Minimal state ---
+  // ---------- Storage helpers ----------
+  var SAVE_KEY = "storypager_demo_save_v2";
+
+  function canUseLocalStorage() {
+    try {
+      var k = "__sp_test__";
+      localStorage.setItem(k, "1");
+      localStorage.removeItem(k);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  var HAS_LS = canUseLocalStorage();
+
+  function saveState() {
+    var payload = {
+      v: 2,
+      t: Date.now(),
+      S: S
+    };
+    try {
+      if (HAS_LS) {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+        say("<span class='dim'>[Saved]</span>");
+      } else {
+        say("<span class='dim'>[Save unavailable on this browser]</span>");
+      }
+    } catch (e) {
+      say("<span class='dim'>[Save failed]</span>");
+    }
+  }
+
+  function loadState() {
+    try {
+      if (!HAS_LS) {
+        say("<span class='dim'>[Load unavailable on this browser]</span>");
+        return false;
+      }
+      var raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) {
+        say("<span class='dim'>[No save found]</span>");
+        return false;
+      }
+      var payload = JSON.parse(raw);
+      if (!payload || !payload.S) {
+        say("<span class='dim'>[Save corrupted]</span>");
+        return false;
+      }
+      // Replace state object contents (keep reference)
+      var next = payload.S;
+      for (var k in S) if (Object.prototype.hasOwnProperty.call(S, k)) delete S[k];
+      for (var k2 in next) if (Object.prototype.hasOwnProperty.call(next, k2)) S[k2] = next[k2];
+
+      say("<span class='dim'>[Loaded]</span>");
+      renderStory();
+      updateSuggestions();
+      return true;
+    } catch (e) {
+      say("<span class='dim'>[Load failed]</span>");
+      return false;
+    }
+  }
+
+  function clearSave() {
+    try {
+      if (HAS_LS) localStorage.removeItem(SAVE_KEY);
+      say("<span class='dim'>[Save cleared]</span>");
+    } catch (e) {
+      say("<span class='dim'>[Clear failed]</span>");
+    }
+  }
+
+  // ---------- Minimal state ----------
   var S = {
     loc: "west_portico",
     seenDoorway: false,
@@ -68,7 +162,7 @@
     turns: 0
   };
 
-  // --- Utility ---
+  // ---------- Utility ----------
   function esc(s) {
     return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
@@ -76,8 +170,6 @@
   function say(html) {
     var out = document.getElementById("output");
     out.innerHTML += '<div class="logline">' + html + '</div>';
-    // Kindle browser scrolling can be weird; keep it simple.
-    // Attempt to scroll to bottom:
     try { window.scrollTo(0, document.body.scrollHeight); } catch(e){}
   }
 
@@ -85,31 +177,103 @@
     document.getElementById("output").innerHTML = "";
   }
 
-  // --- Scene text ---
+  function step() { S.turns++; }
+
+  // ---------- Dictionary + normalization ----------
+  // Keep this tiny; you're demoing generosity, not building NLP.
+  var DICT = {
+    verbs: {
+      "x": "examine",
+      "examine": "examine",
+      "look": "look",
+      "l": "look",
+      "inspect": "examine",
+      "check": "examine",
+      "enter": "enter",
+      "go": "enter",
+      "walk": "enter",
+      "step": "enter",
+      "inside": "enter",
+      "in": "enter",
+      "use": "enter",
+      "push": "push",
+      "move": "push",
+      "shift": "push"
+    },
+    nouns: {
+      "shrub": "shrubs",
+      "shrubs": "shrubs",
+      "bush": "shrubs",
+      "bushes": "shrubs",
+      "hedge": "shrubs",
+      "door": "doorway",
+      "doorway": "doorway",
+      "entrance": "doorway",
+      "entry": "doorway",
+      "hidden doorway": "doorway",
+      "doorway behind shrubs": "doorway"
+    }
+  };
+
+  function normalize(raw) {
+    var s = (raw || "").trim().toLowerCase();
+    // remove punctuation
+    s = s.replace(/[.,!?;:()[\]"]/g, " ").replace(/\s+/g, " ").trim();
+    if (!s) return { verb: "", obj: "", raw: "" };
+
+    // Tokenize
+    var toks = s.split(" ");
+
+    // Find verb candidate (first token)
+    var v0 = toks[0] || "";
+    var verb = DICT.verbs[v0] || v0;
+
+    // Remove common filler words for object phrase
+    var fillers = { "the":1, "a":1, "an":1, "to":1, "at":1, "on":1, "through":1, "into":1, "behind":0 }; // keep "behind" sometimes
+    var objToks = toks.slice(1).filter(function(t){ return !fillers[t]; });
+
+    // Special handling for "look at X"
+    if (verb === "look" && objToks[0] === "at") objToks = objToks.slice(1);
+
+    // Rebuild object phrase
+    var obj = objToks.join(" ").trim();
+
+    // Noun normalization (try full phrase first, then last token)
+    if (DICT.nouns[obj]) obj = DICT.nouns[obj];
+    else {
+      // If phrase contains known token, map last token
+      var last = objToks.length ? objToks[objToks.length - 1] : "";
+      if (DICT.nouns[last]) obj = DICT.nouns[last];
+    }
+
+    return { verb: verb, obj: obj, raw: s };
+  }
+
+  // ---------- Scene text ----------
   function renderStory() {
     var story = document.getElementById("story");
     var actions = document.getElementById("actions");
     actions.innerHTML = "";
 
+    // System actions (save/load)
+    renderSysActions();
+
     if (S.loc === "west_portico") {
       var t = "West Portico<br><br>"
         + "More people are relaxing here, perhaps because of the kegman who sells his beer under the theater portico. "
         + "The main street bakes in sunlight to the south; the front of the theater continues to the north, adorned by "
-        + "some decorative potted shrubs. ";
-
-      // In classic IF, the doorway is “half-hidden” and causes grief.
-      // Here we still describe it, but we *honor* the affordance.
-      t += "Half-hidden behind the shrubs is a doorway.";
-
-      t += "<br><br><span class='dim'>Again, you feel that cool thread of air across your face.</span>";
+        + "some decorative potted shrubs. "
+        + "Half-hidden behind the shrubs is a doorway."
+        + "<br><br><span class='dim'>Again, you feel that cool thread of air across your face.</span>";
 
       story.innerHTML = t;
 
-      // Intent-first actions
       addAction("Examine doorway", function () {
         S.seenDoorway = true;
         say("It’s a plain doorway leading into the relative dimness of the theater. A small sign by the jamb reads: <span class='mono'>“By right, please.”</span>");
+        saveState();
         renderStory();
+        updateSuggestions();
       });
 
       addAction(S.shrubsPushedAside ? "Enter doorway" : "Push aside shrubs", function () {
@@ -117,23 +281,16 @@
           S.shrubsPushedAside = true;
           S.seenDoorway = true;
           say("You push aside the shrubs. The doorway is easier to reach now, and the cool air is unmistakable.");
+          saveState();
         } else {
-          // Enter
           S.loc = "theater_lobby";
           S.inTheater = true;
           say("You step through the doorway into the theater’s dim interior.");
+          saveState();
         }
         renderStory();
+        updateSuggestions();
       });
-
-      if (S.shrubsPushedAside) {
-        addAction("Enter doorway", function () {
-          S.loc = "theater_lobby";
-          S.inTheater = true;
-          say("You step through the doorway into the theater’s dim interior.");
-          renderStory();
-        });
-      }
 
       addAction("Look around", function () {
         say("Sunlight, chatter, and the faint smell of beer. The cool thread of air keeps tugging at your attention.");
@@ -149,7 +306,9 @@
       addAction("Go back outside", function () {
         S.loc = "west_portico";
         say("You step back out beneath the portico. The heat returns immediately.");
+        saveState();
         renderStory();
+        updateSuggestions();
       });
 
       addAction("End demo", function () {
@@ -166,96 +325,199 @@
     actions.appendChild(b);
   }
 
-  function step() {
-    S.turns++;
+  function renderSysActions() {
+    var sys = document.getElementById("sysactions");
+    sys.innerHTML = "";
+
+    var b1 = document.createElement("button");
+    b1.textContent = "Save";
+    b1.onclick = function(){ saveState(); };
+    sys.appendChild(b1);
+
+    var b2 = document.createElement("button");
+    b2.textContent = "Load";
+    b2.onclick = function(){ loadState(); };
+    sys.appendChild(b2);
+
+    var b3 = document.createElement("button");
+    b3.textContent = "Clear Save";
+    b3.onclick = function(){ clearSave(); };
+    sys.appendChild(b3);
+
+    if (!HAS_LS) {
+      var note = document.createElement("div");
+      note.className = "small dim";
+      note.textContent = "Note: localStorage appears unavailable on this browser.";
+      sys.appendChild(note);
+    }
   }
 
-  // --- Forgiving “soft parser” ---
-  // This is intentionally tiny: it resolves *intent* for this scene.
+  // ---------- Soft parser ----------
   function handleCommand(raw) {
-    step();
-    var cmd = (raw || "").trim().toLowerCase();
-    if (!cmd) return;
+    var n = normalize(raw);
+    var verb = n.verb;
+    var obj = n.obj;
 
-    // Normalize: remove punctuation, collapse spaces
-    cmd = cmd.replace(/[.,!?;:()[\]"]/g, " ").replace(/\s+/g, " ").trim();
+    if (!verb && !obj) return;
 
-    // Helper checks
-    function has(w) { return cmd.indexOf(w) !== -1; }
+    // Show what we interpreted (quietly helpful)
+    say("<span class='dim'>[Interpreted: " + esc(verb || "?") + (obj ? " " + esc(obj) : "") + "]</span>");
 
-    // Common IF abbreviations
-    if (cmd === "l" || cmd === "look") { say("You take another look."); renderStory(); return; }
-    if (cmd === "x" || cmd === "examine") { cmd = "examine"; }
-
-    // Scene-specific intent resolution:
-    // Goal: if user mentions shrubs/doorway/hidden and wants to enter/go/use, we do the right thing.
-    var wantsEnter = has("enter") || has("go") || has("walk") || has("step") || has("inside") || has("in");
-    var wantsExamine = has("examine") || has("x ") || cmd === "x" || has("look at") || has("inspect");
-    var mentionsShrubs = has("shrub") || has("shrubs") || has("bush") || has("bushes");
-    var mentionsDoor = has("door") || has("doorway") || has("entry") || has("entrance");
-    var mentionsHidden = has("hidden") || has("behind") || has("half") || has("half hidden");
+    // Global commands
+    if (verb === "look" && !obj) { say("You take another look."); renderStory(); updateSuggestions(); return; }
 
     if (S.loc === "west_portico") {
-      // Examine cases
-      if (wantsExamine && (mentionsDoor || (mentionsHidden && mentionsDoor) || (mentionsDoor && mentionsShrubs) || mentionsHidden)) {
+      // Examine
+      if (verb === "examine" && (!obj || obj === "doorway" || obj === "shrubs")) {
         S.seenDoorway = true;
         say("It’s a plain doorway leading into the relative dimness of the theater. A small sign reads: <span class='mono'>“By right, please.”</span>");
+        saveState();
         renderStory();
+        updateSuggestions();
         return;
       }
 
-      // Enter cases (the “frustration” fixes)
-      if (wantsEnter && (mentionsShrubs || mentionsDoor || mentionsHidden)) {
-        // If they try to “enter shrubs”, we interpret intent as reaching the doorway.
+      // Push shrubs explicitly
+      if (verb === "push" && (obj === "shrubs" || obj === "doorway" || !obj)) {
         if (!S.shrubsPushedAside) {
           S.shrubsPushedAside = true;
           S.seenDoorway = true;
-          say("You push aside the shrubs to get through. The doorway is right there now, breathing cool air.");
+          say("You push aside the shrubs. The doorway is clear now, breathing cool air.");
+          saveState();
           renderStory();
+          updateSuggestions();
+          return;
+        } else {
+          say("The shrubs are already out of the way.");
+          return;
+        }
+      }
+
+      // Enter intent: doorway or shrubs both succeed (the whole point)
+      if (verb === "enter" && (obj === "doorway" || obj === "shrubs" || !obj)) {
+        if (!S.shrubsPushedAside) {
+          S.shrubsPushedAside = true;
+          S.seenDoorway = true;
+          say("You push aside the shrubs to get through. The doorway is right there now.");
+          saveState();
+          renderStory();
+          updateSuggestions();
           return;
         } else {
           S.loc = "theater_lobby";
           S.inTheater = true;
           say("You slip through the doorway into the theater’s dim interior.");
+          saveState();
           renderStory();
+          updateSuggestions();
           return;
         }
       }
 
-      // “use doorway” should not be rejected as “not a verb”
-      if (has("use") && (mentionsDoor || mentionsHidden)) {
-        if (!S.shrubsPushedAside) {
-          S.shrubsPushedAside = true;
-          S.seenDoorway = true;
-          say("You reach for the doorway, but the shrubs are in the way. You push them aside.");
-          renderStory();
-        } else {
-          S.loc = "theater_lobby";
-          S.inTheater = true;
-          say("You use the doorway in the traditional manner: by walking through it.");
-          renderStory();
-        }
-        return;
-      }
-
-      // If we truly can’t map intent, respond gently.
-      say("You hesitate. Try <span class='mono'>look</span>, <span class='mono'>examine doorway</span>, or just press a button.");
+      // If we can’t map intent, respond gently.
+      say("You hesitate. Try <span class='mono'>examine doorway</span>, <span class='mono'>enter doorway</span>, or press a button.");
       return;
     }
 
     if (S.loc === "theater_lobby") {
-      if (wantsEnter && (has("back") || has("outside") || has("out") || has("portico"))) {
+      if (verb === "enter" && (obj === "outside" || obj === "portico" || obj === "doorway" || !obj)) {
         S.loc = "west_portico";
         say("You step back outside beneath the portico.");
+        saveState();
         renderStory();
+        updateSuggestions();
         return;
       }
-      say("Nothing else to do here in the demo. Try <span class='mono'>go back</span> or press a button.");
+      say("Nothing else to do here in the demo. Try <span class='mono'>enter doorway</span> (to go back) or press a button.");
       return;
     }
   }
 
-  // Input handling
+  // ---------- Autocomplete / suggestions ----------
+  function getContextSuggestions(prefix) {
+    // Prefix is the current input, lowercased.
+    // We return short, clickable commands.
+    var base = [];
+
+    // Contextual common commands
+    if (S.loc === "west_portico") {
+      base = base.concat([
+        "look",
+        "examine doorway",
+        "x doorway",
+        "push shrubs",
+        "enter shrubs",
+        "enter doorway",
+        "use doorway",
+        "go inside"
+      ]);
+    } else if (S.loc === "theater_lobby") {
+      base = base.concat([
+        "look",
+        "go back",
+        "enter doorway",
+        "outside"
+      ]);
+    }
+
+    // Global helpfuls
+    base = base.concat([
+      "save",
+      "load",
+      "clear save"
+    ]);
+
+    // Deduplicate
+    var seen = {};
+    var uniq = [];
+    for (var i=0;i<base.length;i++){
+      var k = base[i];
+      if (!seen[k]) { seen[k]=1; uniq.push(k); }
+    }
+
+    // Filter by prefix (very simple)
+    if (!prefix) return uniq.slice(0, 8);
+    var p = prefix.toLowerCase();
+    var filtered = uniq.filter(function(x){ return x.indexOf(p) === 0 || x.indexOf(p) !== -1; });
+    return filtered.slice(0, 8);
+  }
+
+  function updateSuggestions() {
+    var cmdEl = document.getElementById("cmd");
+    var chips = document.getElementById("chips");
+    var val = (cmdEl.value || "").trim().toLowerCase();
+
+    var sugg = getContextSuggestions(val);
+    chips.innerHTML = "";
+
+    for (var i=0;i<sugg.length;i++){
+      (function(txt){
+        var a = document.createElement("a");
+        a.href = "javascript:void(0)";
+        a.className = "chip";
+        a.textContent = txt;
+        a.onclick = function(){
+          // Fill input and focus; on Kindle focus might be limited, but filling helps.
+          cmdEl.value = txt;
+          try { cmdEl.focus(); } catch(e){}
+          updateSuggestions();
+        };
+        chips.appendChild(a);
+      })(sugg[i]);
+    }
+  }
+
+  // Treat save/load/clear as "commands" too, so you can test in input.
+  function handleMetaCommands(raw) {
+    var s = (raw || "").trim().toLowerCase();
+    if (!s) return false;
+    if (s === "save") { saveState(); return true; }
+    if (s === "load") { loadState(); return true; }
+    if (s === "clear" || s === "clear save" || s === "clear storage") { clearSave(); return true; }
+    return false;
+  }
+
+  // ---------- Input handling ----------
   var cmdEl = document.getElementById("cmd");
   cmdEl.onkeydown = function (e) {
     e = e || window.event;
@@ -263,15 +525,21 @@
       var v = cmdEl.value;
       cmdEl.value = "";
       say("<span class='mono'>&gt; " + esc(v) + "</span>");
-      handleCommand(v);
+      if (!handleMetaCommands(v)) handleCommand(v);
+      updateSuggestions();
       return false;
     }
   };
+  cmdEl.onkeyup = function(){ updateSuggestions(); };
+  cmdEl.onclick = function(){ updateSuggestions(); };
 
-  // Start
+  // ---------- Start ----------
   clearOutput();
   renderStory();
-  say("<b>Demo:</b> try pressing <i>Push aside shrubs</i>, or type something frustrating like <span class='mono'>enter shrubs</span>.");
+  updateSuggestions();
+  say("<b>Demo:</b> press <i>Push aside shrubs</i>, or type something like <span class='mono'>enter shrubs</span>.");
+  // Auto-load if desired (commented out by default):
+  // loadState();
 })();
 </script>
 </body>
