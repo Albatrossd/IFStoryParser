@@ -51,7 +51,7 @@
     <section id="top-section">
         <h1>Story Pager — Escape Demo</h1>
         <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
-        <div id="score" class="small dim">Score: <span id="score-int"></span> in <span id="turns">0</span> turns</div>
+        <div id="score" class="small dim">Score: <span id="score-int"> out of <span id="score-max">0</span> possible points in </span> in <span id="turns">0</span> turns</div>
     </section>
 
   <div id="story"></div>
@@ -334,6 +334,7 @@ function say(html) {
       var next = JSON.parse(raw);
       if (!next || !next.flags) { if(!silent) say("<span class='dim'>[Save corrupted]</span>"); return false; }
       STATE = next;
+      window.STATE = STATE;  // Update global reference
       if(!silent) say("<span class='dim'>[Loaded]</span>");
       render();
       return true;
@@ -347,20 +348,26 @@ function say(html) {
 
   // ---------- State ----------
   var STATE = deepClone(STORY.state);
+  window.STATE = STATE;  // Expose for console debugging
 
   function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
 
-    // --score display--
-    STATE.score = {
+  // Initialize score IMMEDIATELY after STATE creation
+  STATE.score = {
     total: 0,
     exploration: 0,
     puzzles: 0,
     choices: 0,
-    hints: 0,
+    hints: 0
+  };
+  
+  STATE.meta = {
     visited: {},
     puzzlesSolved: {}
-    };
-    updateScoreDisplay();
+  };
+  
+  console.log("Score initialized:", STATE.score);
+  console.log("Test access - exploration:", STATE.score["exploration"]);
   // ---------- Tiny expression evaluator ----------
   // Supports: true, !flags.x, flags.x, flags.x && flags.y, flags.x || flags.y
   function evalWhen(expr) {
@@ -413,6 +420,15 @@ function say(html) {
       var step = doList[i];
       if (step.say) say(step.say);
       if (step.set) applySet(step.set);
+      if (step.score) {
+        console.log("step.score object:", step.score);
+        console.log("step.score.type value:", step.score.type);
+        var scoreKey = step.score.once;
+        if (!scoreKey || !STATE.meta.visited[scoreKey]) {
+          if (scoreKey) STATE.meta.visited[scoreKey] = true;
+          addScore(step.score.type, step.score.add);
+        }
+      }
       if (step.if) {
         var ok = evalWhen(step.if);
         if (ok && step.then) runDo(step.then);
@@ -422,28 +438,32 @@ function say(html) {
   }
   // ---------- Score update ----------
 function addScore(type, amount) {
-    if (!state.score[type]) return;
+    if (!(type in STATE.score)) {
+        console.warn("Score type not found:", type);
+        return;
+    }
     STATE.score[type] += amount;
     STATE.score.total += amount;
     updateScoreDisplay();
-    }
+}
+
 function updateScoreDisplay(){
     document.getElementById("score-int").textContent = STATE.score.total;
     document.getElementById("turns").textContent = STATE.turns;
-    }
+}
 
 // function visitRoom(roomId) {
-//         if (!state.score.visited[roomId]) {
-//         state.score.visited[roomId] = true;
+//         if (!STATE.score.visited[roomId]) {
+//         STATE.score.visited[roomId] = true;
 //         addScore('exploration', 5);
 //         }
 //     }
 
 
 // function solvePuzzle(id, turnsUsed, optimalTurns) {
-//     if (state.score.puzzlesSolved[id]) return;
+//     if (STATE.score.puzzlesSolved[id]) return;
 //     const earned = Math.max(0, 20 - (turnsUsed - optimalTurns) * 2);
-//     state.score.puzzlesSolved[id] = true;
+//     STATE.score.puzzlesSolved[id] = true;
 //     addScore('puzzles', earned);
 //     }
 
@@ -490,6 +510,15 @@ function updateScoreDisplay(){
 
     // If already escaped, show only end state actions (or none)
     if (STATE.flags.escaped) {
+      // Show detailed score results
+      say("<div style='border-top: 2px solid #000; margin-top: 10px; padding-top: 10px;'>");
+      say("<b>Final Score: " + STATE.score.total + "</b>");
+      say("Exploration: " + STATE.score.exploration);
+      say("Puzzles: " + STATE.score.puzzles);
+      say("Choices: " + STATE.score.choices);
+      say("Hints: " + STATE.score.hints);
+      say("Turns taken: " + STATE.turns);
+      say("</div>");
       // Still allow Save/Load
       updateSuggestions(avail);
       return;
@@ -700,6 +729,7 @@ cmdbtn.onclick = function(){
 
   // ---------- Start ----------
   clearOutput();
+  updateScoreDisplay();
   render();
   updateSuggestions(getAvailableActions());
   say("<b>Goal:</b> escape in ~8 turns. Use buttons or type commands.");
