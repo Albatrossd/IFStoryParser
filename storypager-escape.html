@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Story Pager — Escape Demo (JSON Engine)</title>
   <style>
-    body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; }
+    body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; height: 100vh; display: flex; flex-direction: column; justify-content: space-between;}
+    #top-section { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 6px; }
     h1 { font-size: 18px; margin: 0 0 8px 0; }
-    #story { font-size: 16px; }
-    #output { margin: 10px 0; max-height: 25vh; overflow: scroll; }
+    #story { font-size: 16px; height: 25vh; overflow: scroll; }
+    #output { margin: 10px 0; max-height: 40vh; overflow: scroll; }
     .rule { border-top: 1px solid #000; margin: 10px 0; }
     .btnrow { margin: 8px 0; }
     button {
@@ -18,6 +19,7 @@
       margin: 4px 6px 4px 0;
       border: 1px solid #000;
       background: #fff;
+    cursor: pointer;
     }
     #cmdwrap { margin-top: 10px; }
     input[type="text"] {
@@ -46,28 +48,29 @@
   </style>
 </head>
 <body>
-  <h1>Story Pager — Escape Demo</h1>
-  <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
-
-  <div class="rule"></div>
+    <section id="top-section">
+        <h1>Story Pager — Escape Demo</h1>
+        <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
+        <div id="score" class="small dim">Score: <span id="score-int"></span> in <span id="turns">0</span> turns</div>
+    </section>
 
   <div id="story"></div>
-  <div class="btnrow" id="actions"></div>
-
+  
   <div class="rule"></div>
-
+  
   <div id="output"></div>
-  <div class="btnrow" id="sysactions"></div>
-
+  
   <div id="cmdwrap">
-    <div class="small dim">Command (optional):</div>
-    <input id="cmd" type="text" placeholder='Try: "open toolbox", "flip aux", "remove vent", "pull lever with hook"' />
-    <div id="suggest" class="dim">
-      <div class="small">Suggestions:</div>
-      <div id="chips"></div>
+      <div class="small dim">Command (optional):</div>
+      <input id="cmd" type="text" placeholder='Try: "open toolbox", "flip aux", "remove vent", "pull lever with hook"' />
+      <div id="suggest" class="dim">
+          <div class="small">Suggestions:</div>
+          <div id="chips"></div>
+        </div>
+        <div class="small dim">Tip: press Enter.</div>
     </div>
-    <div class="small dim">Tip: press Enter.</div>
-  </div>
+    <div class="btnrow" id="actions"></div>
+    <div class="btnrow" id="sysactions"></div>
 
 <!-- ================== STORY BLOB ================== -->
 <script id="story-json" type="application/json">
@@ -163,30 +166,33 @@
           ]
         },
         {
-          "id": "examine_panel",
-          "label": "Examine breaker panel",
-          "verbs": ["examine", "look"],
-          "targets": ["breaker panel", "panel", "breakers"],
-          "when": "!flags.seenPanel",
-          "do": [
+        "id": "examine_panel",
+        "label": "Examine breaker panel",
+        "verbs": ["examine", "look"],
+        "targets": ["breaker panel", "panel", "breakers"],
+        "when": "!flags.seenPanel",
+        "do": [
             {"set": {"flags.seenPanel": true}},
+            {"score": {"type":"exploration","add":3, "once":"inspect:panel"}},
+            {"puzzle": {"id":"main_escape","start": true}},
             {"say": "The breaker panel is labeled with faded marker:"},
             {"say": "LIGHTS • HVAC • SECURITY • AUX — DO NOT TOUCH"},
             {"say": "The SECURITY switch is already off. The hum seems tied to AUX."}
-          ]
+        ]
         },
         {
-          "id": "flip_aux",
-          "label": "Flip AUX breaker",
-          "verbs": ["flip", "use", "switch", "turn"],
-          "targets": ["aux", "breaker panel"],
-          "when": "flags.seenPanel && !flags.auxFlipped",
-          "do": [
+        "id": "flip_aux",
+        "label": "Flip AUX breaker",
+        "verbs": ["flip", "use", "switch", "turn"],
+        "targets": ["aux", "breaker panel"],
+        "when": "flags.seenPanel && !flags.auxFlipped",
+        "do": [
             {"set": {"flags.auxFlipped": true}},
+            {"score": {"type":"choices","add":5, "once":"choice:flip_aux"}},
             {"say": "You flip AUX. The hum cuts out. The fluorescent light steadies."},
             {"say": "From inside the vent, you hear a dull click — like a latch disengaging."},
             {"set": {"flags.latchClick": true}}
-          ]
+        ]
         },
         {
           "id": "open_toolbox",
@@ -232,16 +238,17 @@
           ]
         },
         {
-          "id": "flip_aux_after_vent",
-          "label": "Flip AUX (after removing vent)",
-          "verbs": ["flip", "use", "switch", "turn"],
-          "targets": ["aux"],
-          "when": "flags.seenPanel && flags.ventRemoved && !flags.auxFlipped",
-          "do": [
+        "id": "flip_aux_after_vent",
+        "label": "Flip AUX (after removing vent)",
+        "verbs": ["flip", "use", "switch", "turn"],
+        "targets": ["aux"],
+        "when": "flags.seenPanel && flags.ventRemoved && !flags.auxFlipped",
+        "do": [
             {"set": {"flags.auxFlipped": true, "flags.latchClick": true, "flags.leverAccessible": true}},
+            {"score": {"type":"choices","add":5, "once":"choice:flip_aux"}},
             {"say": "You flip AUX. The hum dies and the light steadies."},
             {"say": "Inside the duct, the lever gives slightly — it’s loose now."}
-          ]
+        ]
         },
         {
           "id": "pull_lever",
@@ -303,11 +310,11 @@
   }
   var HAS_LS = canUseLocalStorage();
 
-  function say(html) {
+function say(html) {
     var out = document.getElementById("output");
     out.innerHTML += '<div class="logline">' + html + '</div>';
-    try { window.scrollTo(0, document.body.scrollHeight); } catch(e){}
-  }
+    try { out.scrollTop = out.scrollHeight; } catch(e){}
+}
 
   function clearOutput(){ document.getElementById("output").innerHTML = ""; }
 
@@ -343,6 +350,17 @@
 
   function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
 
+    // --score display--
+    STATE.score = {
+    total: 0,
+    exploration: 0,
+    puzzles: 0,
+    choices: 0,
+    hints: 0,
+    visited: {},
+    puzzlesSolved: {}
+    };
+    updateScoreDisplay();
   // ---------- Tiny expression evaluator ----------
   // Supports: true, !flags.x, flags.x, flags.x && flags.y, flags.x || flags.y
   function evalWhen(expr) {
@@ -402,6 +420,32 @@
       }
     }
   }
+  // ---------- Score update ----------
+function addScore(type, amount) {
+    if (!state.score[type]) return;
+    STATE.score[type] += amount;
+    STATE.score.total += amount;
+    updateScoreDisplay();
+    }
+function updateScoreDisplay(){
+    document.getElementById("score-int").textContent = STATE.score.total;
+    document.getElementById("turns").textContent = STATE.turns;
+    }
+
+// function visitRoom(roomId) {
+//         if (!state.score.visited[roomId]) {
+//         state.score.visited[roomId] = true;
+//         addScore('exploration', 5);
+//         }
+//     }
+
+
+// function solvePuzzle(id, turnsUsed, optimalTurns) {
+//     if (state.score.puzzlesSolved[id]) return;
+//     const earned = Math.max(0, 20 - (turnsUsed - optimalTurns) * 2);
+//     state.score.puzzlesSolved[id] = true;
+//     addScore('puzzles', earned);
+//     }
 
   // ---------- Render ----------
   function renderSysActions(){
@@ -431,8 +475,8 @@
     renderSysActions();
     var scene = STORY.scenes[STATE.loc];
     var storyEl = document.getElementById("story");
-    var actionsEl = document.getElementById("actions");
-    actionsEl.innerHTML = "";
+    // var actionsEl = document.getElementById("actions");
+    // actionsEl.innerHTML = "";
 
     var body = (scene.body || []).join("<br>");
     storyEl.innerHTML = "<b>" + esc(scene.title) + "</b><br><br>" + body;
@@ -451,20 +495,20 @@
       return;
     }
 
-    for (var j=0;j<avail.length;j++){
-      (function(action){
-        var b = document.createElement("button");
-        b.textContent = action.label;
-        b.onclick = function(){
-          STATE.turns++;
-          runDo(action.do || []);
-          saveState(true);
-          render();
-          updateSuggestions(getAvailableActions());
-        };
-        actionsEl.appendChild(b);
-      })(avail[j]);
-    }
+    // for (var j=0;j<avail.length;j++){
+    //   (function(action){
+    //     var b = document.createElement("button");
+    //     b.textContent = action.label;
+    //     b.onclick = function(){
+    //       STATE.turns++;
+    //       runDo(action.do || []);
+    //       saveState(true);
+    //       render();
+    //       updateSuggestions(getAvailableActions());
+    //     };
+    //     actionsEl.appendChild(b);
+    //   })(avail[j]);
+    // }
 
     updateSuggestions(avail);
   }
