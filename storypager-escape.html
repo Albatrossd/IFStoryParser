@@ -63,11 +63,11 @@
   <div id="cmdwrap">
       <div class="small dim">Command (optional):</div>
       <input id="cmd" type="text" placeholder='Try: "open toolbox", "flip aux", "remove vent", "pull lever with hook"' />
+      <input id="cmdbtn" type="button" value="Enter" />
       <div id="suggest" class="dim">
           <div class="small">Suggestions:</div>
           <div id="chips"></div>
         </div>
-        <div class="small dim">Tip: press Enter.</div>
     </div>
     <div class="btnrow" id="actions"></div>
     <div class="btnrow" id="sysactions"></div>
@@ -671,18 +671,30 @@ function updateScoreDisplay(){
   }
 
   // ---------- Wire up input ----------
-  var cmdEl = document.getElementById("cmd");
-  cmdEl.onkeydown = function(e){
+var cmdEl = document.getElementById("cmd");
+var cmdbtn = document.getElementById("cmdbtn");
+
+function submitCmd() {
+    var v = cmdEl.value;
+    if (!v) return;
+    cmdEl.value = "";
+    say("<span class='mono'>&gt; " + esc(v) + "</span>");
+    handleCommand(v);
+    updateSuggestions(getAvailableActions());
+}
+
+cmdEl.onkeydown = function(e){
     e = e || window.event;
     if (e.keyCode === 13) {
-      var v = cmdEl.value;
-      cmdEl.value = "";
-      say("<span class='mono'>&gt; " + esc(v) + "</span>");
-      handleCommand(v);
-      updateSuggestions(getAvailableActions());
-      return false;
+        if (e.preventDefault) e.preventDefault();
+        submitCmd();
+        return false;
     }
-  };
+};
+
+cmdbtn.onclick = function(){
+    submitCmd();
+};
   cmdEl.onkeyup = function(){ updateSuggestions(getAvailableActions()); };
   cmdEl.onclick = function(){ updateSuggestions(getAvailableActions()); };
 
