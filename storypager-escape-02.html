@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Story Pager — Escape Demo (JSON Engine)</title>
+  <style>
+    body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; height: 100vh; display: flex; flex-direction: column; justify-content: space-between;}
+    #top-section { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 6px; }
+    h1 { font-size: 18px; margin: 0 0 8px 0; }
+    #story { font-size: 16px; height: 25vh; overflow: scroll; }
+    #output { margin: 10px 0; max-height: 40vh; overflow: scroll; }
+    .rule { border-top: 1px solid #000; margin: 10px 0; }
+    .btnrow { margin: 8px 0; }
+    button {
+      font-family: serif;
+      font-size: 16px;
+      padding: 8px 10px;
+      margin: 4px 6px 4px 0;
+      border: 1px solid #000;
+      background: #fff;
+    cursor: pointer;
+    }
+    #cmdwrap { margin-top: 10px; }
+    input[type="text"] {
+      font-family: monospace;
+      font-size: 14px;
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #000;
+      box-sizing: border-box;
+    }
+    .small { font-size: 12px; }
+    .mono { font-family: monospace; }
+    .dim { opacity: 0.9; }
+    .logline { margin: 6px 0; }
+
+    #suggest { margin-top: 6px; border: 1px solid #000; padding: 6px; }
+    #suggest .chip {
+      display: inline-block;
+      border: 1px solid #000;
+      padding: 4px 6px;
+      margin: 4px 6px 0 0;
+      font-family: monospace;
+      font-size: 13px;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+    <section id="top-section">
+        <h1>Story Pager — Escape Demo</h1>
+        <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
+        <div id="score" class="small dim">Score: <span id="score-int"> out of <span id="score-max">0</span> possible points in </span> in <span id="turns">0</span> turns</div>
+    </section>
+
+  <div id="story"></div>
+  
+  <div class="rule"></div>
+  
+  <div id="output"></div>
+  
+  <div id="cmdwrap">
+      <div class="small dim">Command (optional):</div>
+      <input id="cmd" type="text" placeholder='Try: "open toolbox", "flip aux", "remove vent", "pull lever with hook"' />
+      <input id="cmdbtn" type="button" value="Enter" />
+      <div id="suggest" class="dim">
+          <div class="small">Suggestions:</div>
+          <div id="chips"></div>
+        </div>
+    </div>
+    <div class="btnrow" id="actions"></div>
+    <div class="btnrow" id="sysactions"></div>
+
+<!-- ================== STORY BLOB ================== -->
+<script id="story-json" type="application/json">
+{
+  "id": "maintenance-corridor",
+  "title": "The Maintenance Corridor",
+  "version": 1,
+  "start": "corridor",
+  "globals": {
+    "maxTurns": 10
+  },
+  "dictionary": {
+    "verbs": {
+      "x": "examine",
+      "examine": "examine",
+      "inspect": "examine",
+      "look": "look",
+      "l": "look",
+      "open": "open",
+      "take": "take",
+      "get": "take",
+      "grab": "take",
+      "flip": "flip",
+      "switch": "flip",
+      "turn": "flip",
+      "remove": "remove",
+      "unscrew": "remove",
+      "pull": "pull",
+      "use": "use",
+      "try": "try",
+      "enter": "enter",
+      "go": "enter",
+      "hide": "hide",
+      "wait": "wait",
+      "listen": "listen"
+    },
+    "nouns": {
+      "hall": "corridor",
+      "corridor": "corridor",
+      "floor": "floor",
+      "camera": "camera",
+      "dome": "camera",
+      "light": "light",
+      "motion": "sensor",
+      "sensor": "sensor",
+      "badge": "badge",
+      "card": "badge",
+      "reader": "reader",
+      "panel": "access panel",
+      "access": "access panel",
+      "door": "secure door",
+      "secure": "secure door",
+      "handle": "secure door",
+      "cart": "cart",
+      "wheels": "cart",
+      "cover": "cover",
+      "grate": "grate",
+      "vent": "grate"
+    }
+  },
+  "state": {
+    "turns": 0,
+    "loc": "corridor",
+    "flags": {
+      "seenCorridor": false,
+      "lightsOn": false,
+      "cameraWatched": true,
+      "sensorArmed": true,
+      "alarmTriggered": false,
+      "foundBadge": false,
+      "tookBadge": false,
+      "foundLight": false,
+      "tookLight": false,
+      "hidOnce": false,
+      "heardFootsteps": false,
+      "coverMoved": false,
+      "accessPanelOpened": false,
+      "sensorDisabled": false,
+      "doorUnlocked": false,
+      "escaped": false
+    }
+  },
+  "scenes": {
+    "corridor": {
+      "title": "Maintenance Corridor",
+      "body": [
+        "You step into a quiet maintenance corridor. The air is colder out here.",
+        "Emergency strips glow along the floor, just enough to see pipes and unfinished concrete.",
+        "",
+        "A dome camera sits in the ceiling corner. A motion sensor watches the middle of the hall.",
+        "There’s a secure door ahead with a badge reader.",
+        "",
+        "An unmarked cart is parked against the wall, and a loose floor cover sits slightly ajar nearby."
+      ],
+      "actions": [
+        {
+          "id": "look",
+          "label": "Look around",
+          "verbs": ["look", "examine"],
+          "targets": ["room", "around", "corridor", "hall"],
+          "when": "true",
+          "do": [
+            {"if": "!flags.seenCorridor", "then": [
+              {"set": {"flags.seenCorridor": true}},
+              {"score": {"type":"exploration","add":3, "once":"inspect:corridor"}},
+              {"say": "You clock the obvious threats: camera overhead, motion sensor mid-hall, door reader ahead."},
+              {"say": "If you trigger something, you probably won’t get a second clean chance."}
+            ], "else": [
+              {"say": "Same corridor. Same watchers. The door is still the problem."}
+            ]}
+          ]
+        },
+        {
+          "id": "examine_camera",
+          "label": "Examine camera",
+          "verbs": ["examine", "look", "inspect"],
+          "targets": ["camera", "dome"],
+          "when": "true",
+          "do": [
+            {"say": "The dome camera is old but alive. A faint red blink pulses every few seconds."},
+            {"if": "flags.cameraWatched", "then": [
+              {"say": "<span class='dim'>[It is currently pointed down the corridor.]</span>"}
+            ], "else": [
+              {"say": "<span class='dim'>[It’s angled away. For now.]</span>"}
+            ]}
+          ]
+        },
+        {
+          "id": "use_camera",
+          "label": "Angle camera away (risky but clean)",
+          "verbs": ["use", "try"],
+          "targets": ["camera"],
+          "when": "flags.cameraWatched && !flags.alarmTriggered",
+          "do": [
+            {"say": "You reach up slowly and rotate the camera dome."},
+            {"say": "For a heartbeat, the red LED pauses — like it noticed."},
+            {"set": {"flags.cameraWatched": false}},
+            {"score": {"type":"choices","add":5, "once":"choice:disable_camera"}},
+            {"score": {"type":"stealth","add":2, "once":"stealth:disable_camera"}},
+            {"say": "<span class='dim'>[Camera no longer covers the corridor.]</span>"}
+          ]
+        },
+        {
+          "id": "examine_sensor",
+          "label": "Examine motion sensor",
+          "verbs": ["examine", "look", "inspect"],
+          "targets": ["sensor", "motion"],
+          "when": "true",
+          "do": [
+            {"say": "A motion sensor points at the middle of the corridor. It’s watching the space you must cross."},
+            {"if": "flags.sensorArmed && !flags.sensorDisabled", "then": [
+              {"say": "<span class='dim'>[Armed.]</span>"}
+            ], "else": [
+              {"say": "<span class='dim'>[Not armed.]</span>"}
+            ]}
+          ]
+        },
+        {
+          "id": "take_light",
+          "label": "Search cart (find portable light and badge)",
+          "verbs": ["examine", "look", "take", "open"],
+          "targets": ["cart"],
+          "when": "!flags.foundBadge || !flags.foundLight",
+          "do": [
+            {"say": "You check the unmarked cart."},
+            {"say": "There’s a false bottom. Someone really didn’t want this found."},
+            {"set": {"flags.foundBadge": true, "flags.foundLight": true}},
+            {"say": "Inside: a security badge and a portable work light."},
+            {"say": "<span class='dim'>[You can take either or both.]</span>"}
+          ]
+        },
+        {
+          "id": "take_badge",
+          "label": "Take security badge",
+          "verbs": ["take", "get", "grab"],
+          "targets": ["badge", "card"],
+          "when": "flags.foundBadge && !flags.tookBadge",
+          "do": [
+            {"set": {"flags.tookBadge": true}},
+            {"score": {"type":"exploration","add":2, "once":"loot:badge"}},
+            {"score": {"type":"judgment","add":1, "once":"judgment:badge"}},
+            {"say": "You pocket the security badge. It’s warm. Recently used."}
+          ]
+        },
+        {
+          "id": "take_portable_light",
+          "label": "Take portable light",
+          "verbs": ["take", "get", "grab"],
+          "targets": ["light"],
+          "when": "flags.foundLight && !flags.tookLight",
+          "do": [
+            {"set": {"flags.tookLight": true}},
+            {"score": {"type":"exploration","add":1, "once":"loot:light"}},
+            {"say": "You take the portable work light. It’s bright enough to turn this hallway into a stage."},
+            {"say": "<span class='dim'>[Using it may help you see details—but it will also help you be seen.]</span>"}
+          ]
+        },
+        {
+          "id": "flip_portable_light_on",
+          "label": "Switch on portable light (fast but loud)",
+          "verbs": ["flip", "switch", "turn", "use"],
+          "targets": ["light"],
+          "when": "flags.tookLight && !flags.lightsOn",
+          "do": [
+            {"set": {"flags.lightsOn": true}},
+            {"score": {"type":"choices","add":3, "once":"choice:light_on"}},
+            {"score": {"type":"exploration","add":2, "once":"explore:light_on"}},
+            {"say": "You switch on the portable light. The corridor floods with white light."},
+            {"if": "flags.cameraWatched", "then": [
+              {"say": "The dome camera tilts slightly, auto-adjusting."},
+              {"say": "<span class='dim'>[That movement was not subtle.]</span>"},
+              {"set": {"flags.alarmTriggered": true}},
+              {"score": {"type":"stealth","add":-2, "once":"stealth:light_tripped"}},
+              {"score": {"type":"judgment","add":-1, "once":"judgment:light_tripped"}}
+            ]}
+          ]
+        },
+        {
+          "id": "examine_cover",
+          "label": "Examine loose floor cover",
+          "verbs": ["examine", "look", "inspect"],
+          "targets": ["cover", "floor"],
+          "when": "true",
+          "do": [
+            {"say": "A floor cover sits slightly ajar. Under it: a shallow access channel running along the corridor."},
+            {"say": "It’s not big enough to crawl through, but it might hide wiring."}
+          ]
+        },
+        {
+          "id": "remove_cover",
+          "label": "Move the floor cover",
+          "verbs": ["remove", "pull", "open", "use"],
+          "targets": ["cover", "floor"],
+          "when": "!flags.coverMoved",
+          "do": [
+            {"set": {"flags.coverMoved": true}},
+            {"score": {"type":"exploration","add":2, "once":"inspect:cover"}},
+            {"say": "You lift the cover quietly. Dust puffs up and then settles."},
+            {"say": "Inside the channel: a thin cable labeled 'MOTION' feeding the sensor."},
+            {"say": "<span class='dim'>[An access panel nearby could probably disconnect it.]</span>"}
+          ]
+        },
+        {
+          "id": "examine_access_panel",
+          "label": "Examine access panel",
+          "verbs": ["examine", "look", "inspect"],
+          "targets": ["access panel", "panel", "access"],
+          "when": "flags.coverMoved",
+          "do": [
+            {"say": "A small access panel is mounted low on the wall. Two screws hold it in place."},
+            {"say": "<span class='dim'>[If you had a screwdriver, this would be easy.]</span>"}
+          ]
+        },
+        {
+          "id": "open_access_panel",
+          "label": "Open access panel (requires screwdriver)",
+          "verbs": ["open", "remove", "unscrew", "use"],
+          "targets": ["access panel", "panel"],
+          "when": "flags.coverMoved && flags.haveScrewdriver && !flags.accessPanelOpened",
+          "do": [
+            {"set": {"flags.accessPanelOpened": true}},
+            {"score": {"type":"exploration","add":2, "once":"inspect:access_panel"}},
+            {"say": "You unscrew the access panel and fold it open."},
+            {"say": "Inside: the 'MOTION' cable and a simple inline connector."}
+          ]
+        },
+        {
+          "id": "disable_sensor",
+          "label": "Disconnect motion sensor (clean but careful)",
+          "verbs": ["remove", "use", "pull"],
+          "targets": ["sensor", "motion", "panel", "access panel"],
+          "when": "flags.accessPanelOpened && !flags.sensorDisabled && !flags.alarmTriggered",
+          "do": [
+            {"set": {"flags.sensorDisabled": true, "flags.sensorArmed": false}},
+            {"score": {"type":"choices","add":5, "once":"choice:disable_sensor"}},
+            {"score": {"type":"stealth","add":2, "once":"stealth:disable_sensor"}},
+            {"say": "You disconnect the inline connector. The motion sensor’s tiny LED goes dark."},
+            {"say": "<span class='dim'>[Sensor disabled.]</span>"}
+          ]
+        },
+        {
+          "id": "hide",
+          "label": "Hide and listen",
+          "verbs": ["hide", "wait", "listen"],
+          "targets": ["hide", "wait", "listen", "corridor"],
+          "when": "!flags.hidOnce",
+          "do": [
+            {"set": {"flags.hidOnce": true, "flags.heardFootsteps": true}},
+            {"score": {"type":"judgment","add":2, "once":"choice:hide_listen"}},
+            {"say": "You press into the shadow behind the cart and listen."},
+            {"say": "Footsteps pass somewhere beyond the secure door — close enough to feel real consequences."},
+            {"say": "<span class='dim'>[You learn: moving fast right now is risky.]</span>"}
+          ]
+        },
+        {
+          "id": "try_door_no_badge",
+          "label": "Try secure door",
+          "verbs": ["try", "open", "use", "enter", "go"],
+          "targets": ["door", "secure door", "reader", "handle"],
+          "when": "!flags.tookBadge && !flags.doorUnlocked",
+          "do": [
+            {"say": "You test the handle. Locked. The reader blinks red like it’s disappointed in you."},
+            {"score": {"type":"judgment","add":-1, "once":"judgment:no_badge_try"}}
+          ]
+        },
+        {
+          "id": "open_door_clean",
+          "label": "Use badge reader (clean entry)",
+          "verbs": ["use", "open", "enter", "go"],
+          "targets": ["door", "secure door", "reader"],
+          "when": "flags.tookBadge && (flags.sensorDisabled || !flags.sensorArmed) && !flags.alarmTriggered && !flags.doorUnlocked",
+          "do": [
+            {"set": {"flags.doorUnlocked": true}},
+            {"score": {"type":"choices","add":6, "once":"choice:clean_entry"}},
+            {"score": {"type":"stealth","add":3, "once":"stealth:clean_entry"}},
+            {"score": {"type":"judgment","add":2, "once":"judgment:clean_entry"}},
+            {"say": "You tap the badge. The reader flashes green — no drama, no noise."},
+            {"say": "The lock clicks softly. The door yields."}
+          ]
+        },
+        {
+          "id": "open_door_rushed",
+          "label": "Use badge reader (rushed entry)",
+          "verbs": ["use", "open", "enter", "go"],
+          "targets": ["door", "secure door", "reader"],
+          "when": "flags.tookBadge && !flags.doorUnlocked && (flags.alarmTriggered || (flags.sensorArmed && !flags.sensorDisabled))",
+          "do": [
+            {"set": {"flags.doorUnlocked": true}},
+            {"score": {"type":"choices","add":3, "once":"choice:rushed_entry"}},
+            {"score": {"type":"stealth","add":-2, "once":"stealth:rushed_entry"}},
+            {"score": {"type":"judgment","add":-1, "once":"judgment:rushed_entry"}},
+            {"say": "You slap the badge on the reader. It flashes green — but something chirps in response."},
+            {"say": "A distant alarm begins to rise, like the building clearing its throat."}
+          ]
+        },
+        {
+          "id": "exit_next_room",
+          "label": "Go through the door",
+          "verbs": ["enter", "go", "open", "use"],
+          "targets": ["door", "secure door"],
+          "when": "flags.doorUnlocked && !flags.escaped",
+          "do": [
+            {"set": {"flags.escaped": true}},
+            {"score": {"type":"exploration","add":2, "once":"exit:corridor"}},
+            {"if": "!flags.alarmTriggered", "then": [
+              {"say": "You slip through the secure door like you belong here."},
+              {"say": "<b>Clean entry.</b> Whatever’s next, you arrived on your own terms."}
+            ], "else": [
+              {"say": "You push through the secure door as alarms start to bloom behind you."},
+              {"say": "<b>Messy entry.</b> You’re in — but now the building is awake."}
+            ]}
+          ]
+        }
+      ]
+    }
+  }
+}
+
+</script>
+
+<script>
+(function(){
+  // ---------- Parse story ----------
+  var STORY = JSON.parse(document.getElementById("story-json").textContent);
+
+  // ---------- Storage ----------
+  var SAVE_KEY = "storypager_save_" + STORY.id;
+
+  function canUseLocalStorage() {
+    try {
+      var k = "__sp_test__";
+      localStorage.setItem(k, "1");
+      localStorage.removeItem(k);
+      return true;
+    } catch (e) { return false; }
+  }
+  var HAS_LS = canUseLocalStorage();
+
+function say(html) {
+    var out = document.getElementById("output");
+    out.innerHTML += '<div class="logline">' + html + '</div>';
+    try { out.scrollTop = out.scrollHeight; } catch(e){}
+}
+
+  function clearOutput(){ document.getElementById("output").innerHTML = ""; }
+
+  function saveState(silent) {
+    try {
+      if (!HAS_LS) { if(!silent) say("<span class='dim'>[Save unavailable]</span>"); return; }
+      localStorage.setItem(SAVE_KEY, JSON.stringify(STATE));
+      if(!silent) say("<span class='dim'>[Saved]</span>");
+    } catch(e) { if(!silent) say("<span class='dim'>[Save failed]</span>"); }
+  }
+
+  function loadState(silent) {
+    try {
+      if (!HAS_LS) { if(!silent) say("<span class='dim'>[Load unavailable]</span>"); return false; }
+      var raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) { if(!silent) say("<span class='dim'>[No save found]</span>"); return false; }
+      var next = JSON.parse(raw);
+      if (!next || !next.flags) { if(!silent) say("<span class='dim'>[Save corrupted]</span>"); return false; }
+      STATE = next;
+      window.STATE = STATE;  // Update global reference
+      if(!silent) say("<span class='dim'>[Loaded]</span>");
+      render();
+      return true;
+    } catch(e) { if(!silent) say("<span class='dim'>[Load failed]</span>"); return false; }
+  }
+
+  function clearSave() {
+    try { if (HAS_LS) localStorage.removeItem(SAVE_KEY); say("<span class='dim'>[Save cleared]</span>"); }
+    catch(e){ say("<span class='dim'>[Clear failed]</span>"); }
+  }
+
+  // ---------- State ----------
+  var STATE = deepClone(STORY.state);
+  window.STATE = STATE;  // Expose for console debugging
+
+  function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+  // Initialize score IMMEDIATELY after STATE creation
+  STATE.score = {
+    total: 0,
+    exploration: 0,
+    puzzles: 0,
+    choices: 0,
+    hints: 0
+  };
+  
+  STATE.meta = {
+    visited: {},
+    puzzlesSolved: {}
+  };
+  
+  console.log("Score initialized:", STATE.score);
+  console.log("Test access - exploration:", STATE.score["exploration"]);
+  // ---------- Tiny expression evaluator ----------
+  // Supports: true, !flags.x, flags.x, flags.x && flags.y, flags.x || flags.y
+  function evalWhen(expr) {
+    expr = (expr || "").trim();
+    if (!expr) return false;
+    if (expr === "true") return true;
+
+    // Replace tokens with boolean values
+    var e = expr;
+
+    // flags.*
+    e = e.replace(/flags\.([a-zA-Z0-9_]+)/g, function(_, k){
+      return STATE.flags[k] ? "true" : "false";
+    });
+
+    // basic !true/false
+    e = e.replace(/!true/g, "false").replace(/!false/g, "true");
+
+    // VERY small safe eval: only allow true/false, operators, parentheses, spaces
+    if (!/^[truefals() !&|]+$/.test(e.replace(/true|false/g, "true"))) {
+      return false;
+    }
+    // Use Function to evaluate boolean expression
+    try {
+      // eslint-disable-next-line no-new-func
+      return !!Function("return (" + e + ");")();
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function applySet(setObj) {
+    for (var key in setObj) {
+      if (!Object.prototype.hasOwnProperty.call(setObj, key)) continue;
+      var val = setObj[key];
+      // Only supporting flags.* and turns/loc for demo
+      if (key.indexOf("flags.") === 0) {
+        var fk = key.slice("flags.".length);
+        STATE.flags[fk] = !!val;
+      } else if (key === "turns") {
+        STATE.turns = val;
+      } else if (key === "loc") {
+        STATE.loc = val;
+      }
+    }
+  }
+
+  function runDo(doList) {
+    for (var i=0;i<doList.length;i++){
+      var step = doList[i];
+      if (step.say) say(step.say);
+      if (step.set) applySet(step.set);
+      if (step.score) {
+        console.log("step.score object:", step.score);
+        console.log("step.score.type value:", step.score.type);
+        var scoreKey = step.score.once;
+        if (!scoreKey || !STATE.meta.visited[scoreKey]) {
+          if (scoreKey) STATE.meta.visited[scoreKey] = true;
+          addScore(step.score.type, step.score.add);
+        }
+      }
+      if (step.if) {
+        var ok = evalWhen(step.if);
+        if (ok && step.then) runDo(step.then);
+        if (!ok && step.else) runDo(step.else);
+      }
+    }
+  }
+  // ---------- Score update ----------
+function addScore(type, amount) {
+    if (!(type in STATE.score)) {
+        console.warn("Score type not found:", type);
+        return;
+    }
+    STATE.score[type] += amount;
+    STATE.score.total += amount;
+    updateScoreDisplay();
+}
+
+function updateScoreDisplay(){
+    document.getElementById("score-int").textContent = STATE.score.total;
+    document.getElementById("turns").textContent = STATE.turns;
+}
+
+//  function visitRoom(roomId) {
+        //  if (!STATE.score.visited[roomId]) {
+        //  STATE.score.visited[roomId] = true;
+        //  addScore('exploration', 5);
+        //  }
+    //  }
+//  function solvePuzzle(id, turnsUsed, optimalTurns) {
+    //  if (STATE.score.puzzlesSolved[id]) return;
+    //  const earned = Math.max(0, 20 - (turnsUsed - optimalTurns) * 2);
+    //  STATE.score.puzzlesSolved[id] = true;
+    //  addScore('puzzles', earned);
+    //  }
+
+  // ---------- Render ----------
+  function renderSysActions(){
+    var sys = document.getElementById("sysactions");
+    sys.innerHTML = "";
+
+    addSysBtn(sys, "Save", function(){ saveState(false); });
+    addSysBtn(sys, "Load", function(){ loadState(false); });
+    addSysBtn(sys, "Clear Save", function(){ clearSave(); });
+
+    if (!HAS_LS) {
+      var note = document.createElement("div");
+      note.className = "small dim";
+      note.textContent = "Note: localStorage appears unavailable on this browser.";
+      sys.appendChild(note);
+    }
+  }
+
+  function addSysBtn(parent, label, fn){
+    var b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = fn;
+    parent.appendChild(b);
+  }
+
+  function render(){
+    renderSysActions();
+    var scene = STORY.scenes[STATE.loc];
+    var storyEl = document.getElementById("story");
+    // var actionsEl = document.getElementById("actions");
+    // actionsEl.innerHTML = "";
+
+    var body = (scene.body || []).join("<br>");
+    storyEl.innerHTML = "<b>" + esc(scene.title) + "</b><br><br>" + body;
+
+    // Build available actions
+    var avail = [];
+    for (var i=0;i<scene.actions.length;i++){
+      var a = scene.actions[i];
+      if (evalWhen(a.when)) avail.push(a);
+    }
+
+    // If already escaped, show only end state actions (or none)
+    if (STATE.flags.escaped) {
+      // Show detailed score results
+      say("<div style='border-top: 2px solid #000; margin-top: 10px; padding-top: 10px;'>");
+      say("<b>Final Score: " + STATE.score.total + "</b>");
+      say("Exploration: " + STATE.score.exploration);
+      say("Puzzles: " + STATE.score.puzzles);
+      say("Choices: " + STATE.score.choices);
+      say("Hints: " + STATE.score.hints);
+      say("Turns taken: " + STATE.turns);
+      say("</div>");
+      // Still allow Save/Load
+      updateSuggestions(avail);
+      return;
+    }
+
+    for (var j=0;j<avail.length;j++){
+      (function(action){
+        var b = document.createElement("button");
+        b.textContent = action.label;
+        b.onclick = function(){
+          STATE.turns++;
+          runDo(action.do || []);
+          saveState(true);
+          render();
+          updateSuggestions(getAvailableActions());
+        };
+        actionsEl.appendChild(b);
+      })(avail[j]);
+    }
+
+    updateSuggestions(avail);
+  }
+
+  function esc(s){
+    return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function getAvailableActions(){
+    var scene = STORY.scenes[STATE.loc];
+    var out = [];
+    for (var i=0;i<scene.actions.length;i++){
+      if (evalWhen(scene.actions[i].when)) out.push(scene.actions[i]);
+    }
+    return out;
+  }
+
+  // ---------- Soft parser driven by actions ----------
+  function normalizeInput(raw) {
+    var s = (raw || "").trim().toLowerCase();
+    s = s.replace(/[.,!?;:()[\]"]/g, " ").replace(/\s+/g, " ").trim();
+    if (!s) return { verb:"", obj:"", raw:"" };
+
+    var toks = s.split(" ");
+    var v0 = toks[0] || "";
+    var verb = (STORY.dictionary.verbs[v0] || v0);
+
+    // Handle "look at X"
+    var rest = toks.slice(1);
+    if (verb === "look" && rest[0] === "at") rest = rest.slice(1);
+
+    var obj = rest.join(" ").trim();
+    if (STORY.dictionary.nouns[obj]) obj = STORY.dictionary.nouns[obj];
+    else {
+      var last = rest.length ? rest[rest.length-1] : "";
+      if (STORY.dictionary.nouns[last]) obj = STORY.dictionary.nouns[last];
+    }
+
+    return { verb: verb, obj: obj, raw: s };
+  }
+
+  function scoreAction(action, verb, obj) {
+    var score = 0;
+
+    // Verb match
+    var verbs = action.verbs || [];
+    for (var i=0;i<verbs.length;i++){
+      if (verbs[i] === verb) { score += 3; break; }
+    }
+
+    // Target match: if obj empty, give small score if verb matches
+    var targets = action.targets || [];
+    if (!obj) {
+      if (score >= 3) score += 1;
+      return score;
+    }
+
+    for (var j=0;j<targets.length;j++){
+      var t = targets[j];
+      if (t === obj) { score += 4; break; }
+      // partial match helps Kindle typing
+      if (t.indexOf(obj) !== -1 || obj.indexOf(t) !== -1) score += 2;
+    }
+
+    return score;
+  }
+
+  function handleCommand(raw) {
+    var s = (raw || "").trim();
+    if (!s) return;
+
+    // Meta commands
+    var low = s.toLowerCase().trim();
+    if (low === "save") { saveState(false); return; }
+    if (low === "load") { loadState(false); return; }
+    if (low === "clear save" || low === "clear") { clearSave(); return; }
+
+    var n = normalizeInput(s);
+    say("<span class='dim'>[Interpreted: " + esc(n.verb || "?") + (n.obj ? " " + esc(n.obj) : "") + "]</span>");
+
+    var avail = getAvailableActions();
+
+    // Choose best-scoring action among currently available ones
+    var best = null, bestScore = -1;
+    for (var i=0;i<avail.length;i++){
+      var a = avail[i];
+      var sc = scoreAction(a, n.verb, n.obj);
+      if (sc > bestScore) { bestScore = sc; best = a; }
+    }
+
+    // Threshold: avoid firing random actions
+    if (!best || bestScore < 3) {
+      say("You hesitate. Try a button, or type something like <span class='mono'>open toolbox</span>, <span class='mono'>examine panel</span>, or <span class='mono'>remove vent</span>.");
+      return;
+    }
+
+    // Run it
+    STATE.turns++;
+    runDo(best.do || []);
+    saveState(true);
+    render();
+    updateSuggestions(getAvailableActions());
+  }
+
+  // ---------- Suggestions ----------
+  function updateSuggestions(availActions) {
+    var cmdEl = document.getElementById("cmd");
+    var chips = document.getElementById("chips");
+    var val = (cmdEl.value || "").trim().toLowerCase();
+
+    // Build suggestions from actions (verb + target)
+    var sugg = [];
+
+    for (var i=0;i<availActions.length;i++){
+      var a = availActions[i];
+      var v = (a.verbs && a.verbs[0]) ? a.verbs[0] : "";
+      var t = (a.targets && a.targets[0]) ? a.targets[0] : "";
+      if (v && t) sugg.push(v + " " + t);
+      else if (v) sugg.push(v);
+      // Also include label-ish shorthand
+      sugg.push(a.label.toLowerCase());
+    }
+
+    // Add meta commands
+    sugg.push("save"); sugg.push("load"); sugg.push("clear save");
+
+    // Dedup
+    var seen = {};
+    var uniq = [];
+    for (var j=0;j<sugg.length;j++){
+      var k = sugg[j];
+      if (!k || seen[k]) continue;
+      seen[k]=1; uniq.push(k);
+    }
+
+    // Filter
+    var filtered = uniq;
+    if (val) {
+      filtered = uniq.filter(function(x){
+        return x.indexOf(val) !== -1;
+      });
+    }
+    filtered = filtered.slice(0, 8);
+
+    chips.innerHTML = "";
+    for (var m=0;m<filtered.length;m++){
+      (function(txt){
+        var a = document.createElement("a");
+        a.href = "javascript:void(0)";
+        a.className = "chip";
+        a.textContent = txt;
+        a.onclick = function(){
+          cmdEl.value = txt;
+          try { cmdEl.focus(); } catch(e){}
+          updateSuggestions(getAvailableActions());
+        };
+        chips.appendChild(a);
+      })(filtered[m]);
+    }
+  }
+
+  // ---------- Wire up input ----------
+var cmdEl = document.getElementById("cmd");
+var cmdbtn = document.getElementById("cmdbtn");
+
+function submitCmd() {
+    var v = cmdEl.value;
+    if (!v) return;
+    cmdEl.value = "";
+    say("<span class='mono'>&gt; " + esc(v) + "</span>");
+    handleCommand(v);
+    updateSuggestions(getAvailableActions());
+}
+
+cmdEl.onkeydown = function(e){
+    e = e || window.event;
+    if (e.keyCode === 13) {
+        if (e.preventDefault) e.preventDefault();
+        submitCmd();
+        return false;
+    }
+};
+
+cmdbtn.onclick = function(){
+    submitCmd();
+};
+  cmdEl.onkeyup = function(){ updateSuggestions(getAvailableActions()); };
+  cmdEl.onclick = function(){ updateSuggestions(getAvailableActions()); };
+
+  // ---------- Start ----------
+  clearOutput();
+  updateScoreDisplay();
+  render();
+  updateSuggestions(getAvailableActions());
+  say("<b>Goal:</b> escape in ~8 turns. Use buttons or type commands.");
+  // Optional: auto-load
+  // loadState(true);
+})();
+</script>
+</body>
+</html>
