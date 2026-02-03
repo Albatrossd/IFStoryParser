@@ -1,4 +1,4 @@
-# IFStoryParser for Low Poer Devices
+# IFStoryParser for Low Power Devices
 ## eReaders, pagers, Nokia candybar phones
 
 Should be:
