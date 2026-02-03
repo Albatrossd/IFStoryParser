@@ -5,12 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Story Pager — Escape Demo (JSON Engine)</title>
   <style>
-    body { font-family: serif; font-size: 1.4rem; margin: 0; padding: 12px; line-height: 1.6; height: 100vh; display: flex; flex-direction: column; justify-content: space-between;}
-    #top-section { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 6px; max-height: 8vh; }
+    body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; }
     h1 { font-size: 18px; margin: 0 0 8px 0; }
-    #storywrap { position: relative; }
-    #story { font-size: 1.2rem; max-height: 42vh; overflow: scroll; }
-    #output { margin: 10px 0; max-height: 42vh; overflow: scroll; }
+    #story { font-size: 16px; }
+    #output { margin: 10px 0; }
     .rule { border-top: 1px solid #000; margin: 10px 0; }
     .btnrow { margin: 8px 0; }
     button {
@@ -20,7 +18,6 @@
       margin: 4px 6px 4px 0;
       border: 1px solid #000;
       background: #fff;
-    cursor: pointer;
     }
     #cmdwrap { margin-top: 10px; }
     input[type="text"] {
@@ -46,55 +43,31 @@
       font-size: 13px;
       background: #fff;
     }
-    #cmdwrap.hidden {
-      display: none;
-    }
-    #story-wrapper {
-      position: relative;
-    }
-    #story-more-btn {
-      position: absolute;
-      bottom: 10px;
-      right: 10px;
-      background: #000;
-      color: #fff;
-      border: 2px solid #fff;
-      padding: 8px 12px;
-      font-family: serif;
-      font-size: 14px;
-      cursor: pointer;
-      display: none;
-      z-index: 10;
-    }
-    #story-more-btn:hover {
-      background: #333;
-    }
   </style>
 </head>
 <body>
-    <section id="top-section">
-        <h1>Story Pager — Escape Demo</h1>
-        <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
-        <div id="score">Score: <span id="score-int"> out of <span id="score-max">0</span> possible points in </span> in <span id="turns">0</span> turns</div>
-    </section>
-    <section id="storywrap">
-      <div id="story"></div>
-      <button id="story-more-btn">more</button>
-    </section>
-  
+  <h1>Story Pager — Escape Demo</h1>
+  <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
+
+  <div class="rule"></div>
+
+  <div id="story"></div>
+  <div class="btnrow" id="actions"></div>
+
+  <div class="rule"></div>
+
   <div id="output"></div>
-  
+  <div class="btnrow" id="sysactions"></div>
+
   <div id="cmdwrap">
-      <div class="small dim">Command (optional):</div>
-      <input id="cmd" type="text" placeholder='Try: "open toolbox", "flip aux", "remove vent", "pull lever with hook"' />
-      <input id="cmdbtn" type="button" value="Enter" />
-      <div id="suggest" class="dim">
-          <div class="small">Suggestions:</div>
-          <div id="chips"></div>
-        </div>
+    <div class="small dim">Command (optional):</div>
+    <input id="cmd" type="text" placeholder='Try: "open toolbox", "flip aux", "remove vent", "pull lever with hook"' />
+    <div id="suggest" class="dim">
+      <div class="small">Suggestions:</div>
+      <div id="chips"></div>
     </div>
-    <div class="btnrow" id="actions"></div>
-    <div class="btnrow" id="sysactions"></div>
+    <div class="small dim">Tip: press Enter.</div>
+  </div>
 
 <!-- ================== STORY BLOB ================== -->
 <script id="story-json" type="application/json">
@@ -174,16 +147,6 @@
         "The air smells faintly of dust and warm plastic. A fluorescent light flickers overhead.",
         "The door you came through has no handle on this side — just a smooth metal plate.",
         "",
-        "Like, who the hell would design a closet door like that?",
-        "",
-        "I mean, really.",
-        "",
-        "Because, you know, that's just asking for trouble. What if someone gets locked in here? In a strictly practical sense, it's a terrible idea.",
-        "",
-        "Where there's vents, there could be fire or smoke. Where there's electrical panels, there could be shocks or sparks. And yet here you are, stuck inside one.",
-        "",
-        "Don't get me started on building codes.",
-        "",
         "Against the walls: a breaker panel, a utility sink, a metal shelf holding a toolbox, and a vent near the ceiling.",
         "",
         "A low hum vibrates through the room."
@@ -200,33 +163,30 @@
           ]
         },
         {
-        "id": "examine_panel",
-        "label": "Examine breaker panel",
-        "verbs": ["examine", "look"],
-        "targets": ["breaker panel", "panel", "breakers"],
-        "when": "!flags.seenPanel",
-        "do": [
+          "id": "examine_panel",
+          "label": "Examine breaker panel",
+          "verbs": ["examine", "look"],
+          "targets": ["breaker panel", "panel", "breakers"],
+          "when": "!flags.seenPanel",
+          "do": [
             {"set": {"flags.seenPanel": true}},
-            {"score": {"type":"exploration","add":3, "once":"inspect:panel"}},
-            {"puzzle": {"id":"main_escape","start": true}},
             {"say": "The breaker panel is labeled with faded marker:"},
             {"say": "LIGHTS • HVAC • SECURITY • AUX — DO NOT TOUCH"},
             {"say": "The SECURITY switch is already off. The hum seems tied to AUX."}
-        ]
+          ]
         },
         {
-        "id": "flip_aux",
-        "label": "Flip AUX breaker",
-        "verbs": ["flip", "use", "switch", "turn"],
-        "targets": ["aux", "breaker panel"],
-        "when": "flags.seenPanel && !flags.auxFlipped",
-        "do": [
+          "id": "flip_aux",
+          "label": "Flip AUX breaker",
+          "verbs": ["flip", "use", "switch", "turn"],
+          "targets": ["aux", "breaker panel"],
+          "when": "flags.seenPanel && !flags.auxFlipped",
+          "do": [
             {"set": {"flags.auxFlipped": true}},
-            {"score": {"type":"choices","add":5, "once":"choice:flip_aux"}},
             {"say": "You flip AUX. The hum cuts out. The fluorescent light steadies."},
             {"say": "From inside the vent, you hear a dull click — like a latch disengaging."},
             {"set": {"flags.latchClick": true}}
-        ]
+          ]
         },
         {
           "id": "open_toolbox",
@@ -272,17 +232,16 @@
           ]
         },
         {
-        "id": "flip_aux_after_vent",
-        "label": "Flip AUX (after removing vent)",
-        "verbs": ["flip", "use", "switch", "turn"],
-        "targets": ["aux"],
-        "when": "flags.seenPanel && flags.ventRemoved && !flags.auxFlipped",
-        "do": [
+          "id": "flip_aux_after_vent",
+          "label": "Flip AUX (after removing vent)",
+          "verbs": ["flip", "use", "switch", "turn"],
+          "targets": ["aux"],
+          "when": "flags.seenPanel && flags.ventRemoved && !flags.auxFlipped",
+          "do": [
             {"set": {"flags.auxFlipped": true, "flags.latchClick": true, "flags.leverAccessible": true}},
-            {"score": {"type":"choices","add":5, "once":"choice:flip_aux"}},
             {"say": "You flip AUX. The hum dies and the light steadies."},
             {"say": "Inside the duct, the lever gives slightly — it’s loose now."}
-        ]
+          ]
         },
         {
           "id": "pull_lever",
@@ -344,11 +303,11 @@
   }
   var HAS_LS = canUseLocalStorage();
 
-function say(html) {
+  function say(html) {
     var out = document.getElementById("output");
     out.innerHTML += '<div class="logline">' + html + '</div>';
-    try { out.scrollTop = out.scrollHeight; } catch(e){}
-}
+    try { window.scrollTo(0, document.body.scrollHeight); } catch(e){}
+  }
 
   function clearOutput(){ document.getElementById("output").innerHTML = ""; }
 
@@ -368,7 +327,6 @@ function say(html) {
       var next = JSON.parse(raw);
       if (!next || !next.flags) { if(!silent) say("<span class='dim'>[Save corrupted]</span>"); return false; }
       STATE = next;
-      window.STATE = STATE;  // Update global reference
       if(!silent) say("<span class='dim'>[Loaded]</span>");
       render();
       return true;
@@ -382,26 +340,9 @@ function say(html) {
 
   // ---------- State ----------
   var STATE = deepClone(STORY.state);
-  window.STATE = STATE;  // Expose for console debugging
 
   function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
 
-  // Initialize score IMMEDIATELY after STATE creation
-  STATE.score = {
-    total: 0,
-    exploration: 0,
-    puzzles: 0,
-    choices: 0,
-    hints: 0
-  };
-  
-  STATE.meta = {
-    visited: {},
-    puzzlesSolved: {}
-  };
-  
-  console.log("Score initialized:", STATE.score);
-  console.log("Test access - exploration:", STATE.score["exploration"]);
   // ---------- Tiny expression evaluator ----------
   // Supports: true, !flags.x, flags.x, flags.x && flags.y, flags.x || flags.y
   function evalWhen(expr) {
@@ -454,15 +395,6 @@ function say(html) {
       var step = doList[i];
       if (step.say) say(step.say);
       if (step.set) applySet(step.set);
-      if (step.score) {
-        console.log("step.score object:", step.score);
-        console.log("step.score.type value:", step.score.type);
-        var scoreKey = step.score.once;
-        if (!scoreKey || !STATE.meta.visited[scoreKey]) {
-          if (scoreKey) STATE.meta.visited[scoreKey] = true;
-          addScore(step.score.type, step.score.add);
-        }
-      }
       if (step.if) {
         var ok = evalWhen(step.if);
         if (ok && step.then) runDo(step.then);
@@ -470,36 +402,6 @@ function say(html) {
       }
     }
   }
-  // ---------- Score update ----------
-function addScore(type, amount) {
-    if (!(type in STATE.score)) {
-        console.warn("Score type not found:", type);
-        return;
-    }
-    STATE.score[type] += amount;
-    STATE.score.total += amount;
-    updateScoreDisplay();
-}
-
-function updateScoreDisplay(){
-    document.getElementById("score-int").textContent = STATE.score.total;
-    document.getElementById("turns").textContent = STATE.turns;
-}
-
-// function visitRoom(roomId) {
-//         if (!STATE.score.visited[roomId]) {
-//         STATE.score.visited[roomId] = true;
-//         addScore('exploration', 5);
-//         }
-//     }
-
-
-// function solvePuzzle(id, turnsUsed, optimalTurns) {
-//     if (STATE.score.puzzlesSolved[id]) return;
-//     const earned = Math.max(0, 20 - (turnsUsed - optimalTurns) * 2);
-//     STATE.score.puzzlesSolved[id] = true;
-//     addScore('puzzles', earned);
-//     }
 
   // ---------- Render ----------
   function renderSysActions(){
@@ -509,14 +411,13 @@ function updateScoreDisplay(){
     addSysBtn(sys, "Save", function(){ saveState(false); });
     addSysBtn(sys, "Load", function(){ loadState(false); });
     addSysBtn(sys, "Clear Save", function(){ clearSave(); });
-    addSysBtn(sys, "Type Commands", function(){
+    addSysBtn(sys, "Toggle Commands", function(){
       var cmdwrap = document.getElementById("cmdwrap");
       cmdwrap.classList.toggle("hidden");
-
       // append the word "on" on the toggle button when shown
       var btn = sys.lastChild;
       if (cmdwrap.classList.contains("hidden")) {
-        btn.textContent = btn.textContent.replace(" -on", "");
+        btn.textContent = btn.textContent.replace(" on", "");
       } else {
         if (!btn.textContent.includes(" on")) {
           btn.textContent += " on";
@@ -549,33 +450,6 @@ function updateScoreDisplay(){
     var body = (scene.body || []).join("<br>");
     storyEl.innerHTML = "<b>" + esc(scene.title) + "</b><br><br>" + body;
 
-    // Check for overflow and show/hide more button
-    function checkStoryOverflow() {
-      var moreBtn = document.getElementById("story-more-btn");
-      var isOverflowed = storyEl.scrollHeight > storyEl.clientHeight;
-      var scrollBottom = storyEl.scrollTop + storyEl.clientHeight;
-      // If already scrolled to bottom, no need for more button
-      if (scrollBottom >= storyEl.scrollHeight - 1) {
-        isOverflowed = false;
-      }
-      if (isOverflowed) {
-        moreBtn.style.display = "block";
-      } else {
-        moreBtn.style.display = "none";
-      }
-    }
-
-    // Check overflow after content is rendered
-    setTimeout(checkStoryOverflow, 0);
-
-    // Setup more button handler
-    var moreBtn = document.getElementById("story-more-btn");
-    moreBtn.onclick = function() {
-      var scrollAmount = storyEl.clientHeight * 0.8;
-      storyEl.scrollTop += scrollAmount;
-      setTimeout(checkStoryOverflow, 0);
-    };
-
     // Build available actions
     var avail = [];
     for (var i=0;i<scene.actions.length;i++){
@@ -585,15 +459,6 @@ function updateScoreDisplay(){
 
     // If already escaped, show only end state actions (or none)
     if (STATE.flags.escaped) {
-      // Show detailed score results
-      say("<div style='border-top: 2px solid #000; margin-top: 10px; padding-top: 10px;'>");
-      say("<b>Final Score: " + STATE.score.total + "</b>");
-      say("Exploration: " + STATE.score.exploration);
-      say("Puzzles: " + STATE.score.puzzles);
-      say("Choices: " + STATE.score.choices);
-      say("Hints: " + STATE.score.hints);
-      say("Turns taken: " + STATE.turns);
-      say("</div>");
       // Still allow Save/Load
       updateSuggestions(avail);
       return;
@@ -775,36 +640,23 @@ function updateScoreDisplay(){
   }
 
   // ---------- Wire up input ----------
-var cmdEl = document.getElementById("cmd");
-var cmdbtn = document.getElementById("cmdbtn");
-
-function submitCmd() {
-    var v = cmdEl.value;
-    if (!v) return;
-    cmdEl.value = "";
-    say("<span class='mono'>&gt; " + esc(v) + "</span>");
-    handleCommand(v);
-    updateSuggestions(getAvailableActions());
-}
-
-cmdEl.onkeydown = function(e){
+  var cmdEl = document.getElementById("cmd");
+  cmdEl.onkeydown = function(e){
     e = e || window.event;
     if (e.keyCode === 13) {
-        if (e.preventDefault) e.preventDefault();
-        submitCmd();
-        return false;
+      var v = cmdEl.value;
+      cmdEl.value = "";
+      say("<span class='mono'>&gt; " + esc(v) + "</span>");
+      handleCommand(v);
+      updateSuggestions(getAvailableActions());
+      return false;
     }
-};
-
-cmdbtn.onclick = function(){
-    submitCmd();
-};
+  };
   cmdEl.onkeyup = function(){ updateSuggestions(getAvailableActions()); };
   cmdEl.onclick = function(){ updateSuggestions(getAvailableActions()); };
 
   // ---------- Start ----------
   clearOutput();
-  updateScoreDisplay();
   render();
   updateSuggestions(getAvailableActions());
   say("<b>Goal:</b> escape in ~8 turns. Use buttons or type commands.");

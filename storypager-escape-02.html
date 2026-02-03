@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Story Pager — Escape Demo (JSON Engine)</title>
   <style>
-    body { font-family: serif; margin: 0; padding: 12px; line-height: 1.35; height: 100vh; display: flex; flex-direction: column; justify-content: space-between;}
-    #top-section { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 6px; }
+    body { font-family: serif; font-size: 1.4rem; margin: 0; padding: 12px; line-height: 1.6; height: 100vh; display: flex; flex-direction: column; justify-content: space-between;}
+    #top-section { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 6px; max-height: 8vh; }
     h1 { font-size: 18px; margin: 0 0 8px 0; }
-    #story { font-size: 16px; height: 25vh; overflow: scroll; }
-    #output { margin: 10px 0; max-height: 40vh; overflow: scroll; }
+    #storywrap { position: relative; }
+    #story { font-size: 1.2rem; max-height: 42vh; overflow: scroll; }
+    #output { margin: 10px 0; max-height: 42vh; overflow: scroll; }
     .rule { border-top: 1px solid #000; margin: 10px 0; }
     .btnrow { margin: 8px 0; }
     button {
@@ -45,18 +46,41 @@
       font-size: 13px;
       background: #fff;
     }
+    #cmdwrap.hidden {
+      display: none;
+    }
+    #story-wrapper {
+      position: relative;
+    }
+    #story-more-btn {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: #000;
+      color: #fff;
+      border: 2px solid #fff;
+      padding: 8px 12px;
+      font-family: serif;
+      font-size: 14px;
+      cursor: pointer;
+      display: none;
+      z-index: 10;
+    }
+    #story-more-btn:hover {
+      background: #333;
+    }
   </style>
 </head>
 <body>
     <section id="top-section">
         <h1>Story Pager — Escape Demo</h1>
         <div class="small dim">Buttons are generated from JSON. Parser is soft: it maps intent → actions.</div>
-        <div id="score" class="small dim">Score: <span id="score-int"> out of <span id="score-max">0</span> possible points in </span> in <span id="turns">0</span> turns</div>
+        <div id="score">Score: <span id="score-int"> out of <span id="score-max">0</span> possible points in </span> in <span id="turns">0</span> turns</div>
     </section>
-
-  <div id="story"></div>
-  
-  <div class="rule"></div>
+    <section id="storywrap">
+      <div id="story"></div>
+      <button id="story-more-btn">more</button>
+    </section>
   
   <div id="output"></div>
   
@@ -612,6 +636,20 @@ function updateScoreDisplay(){
     addSysBtn(sys, "Save", function(){ saveState(false); });
     addSysBtn(sys, "Load", function(){ loadState(false); });
     addSysBtn(sys, "Clear Save", function(){ clearSave(); });
+    addSysBtn(sys, "Type Commands", function(){
+      var cmdwrap = document.getElementById("cmdwrap");
+      cmdwrap.classList.toggle("hidden");
+
+      // append the word "on" on the toggle button when shown
+      var btn = sys.lastChild;
+      if (cmdwrap.classList.contains("hidden")) {
+        btn.textContent = btn.textContent.replace(" -on", "");
+      } else {
+        if (!btn.textContent.includes(" on")) {
+          btn.textContent += " on";
+        }
+      }
+    });
 
     if (!HAS_LS) {
       var note = document.createElement("div");
@@ -632,11 +670,38 @@ function updateScoreDisplay(){
     renderSysActions();
     var scene = STORY.scenes[STATE.loc];
     var storyEl = document.getElementById("story");
-    // var actionsEl = document.getElementById("actions");
-    // actionsEl.innerHTML = "";
+    var actionsEl = document.getElementById("actions");
+    actionsEl.innerHTML = "";
 
     var body = (scene.body || []).join("<br>");
     storyEl.innerHTML = "<b>" + esc(scene.title) + "</b><br><br>" + body;
+
+    // Check for overflow and show/hide more button
+    function checkStoryOverflow() {
+      var moreBtn = document.getElementById("story-more-btn");
+      var isOverflowed = storyEl.scrollHeight > storyEl.clientHeight;
+      var scrollBottom = storyEl.scrollTop + storyEl.clientHeight;
+      // If already scrolled to bottom, no need for more button
+      if (scrollBottom >= storyEl.scrollHeight - 1) {
+        isOverflowed = false;
+      }
+      if (isOverflowed) {
+        moreBtn.style.display = "block";
+      } else {
+        moreBtn.style.display = "none";
+      }
+    }
+
+    // Check overflow after content is rendered
+    setTimeout(checkStoryOverflow, 0);
+
+    // Setup more button handler
+    var moreBtn = document.getElementById("story-more-btn");
+    moreBtn.onclick = function() {
+      var scrollAmount = storyEl.clientHeight * 0.8;
+      storyEl.scrollTop += scrollAmount;
+      setTimeout(checkStoryOverflow, 0);
+    };
 
     // Build available actions
     var avail = [];
